@@ -319,13 +319,41 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const submit = async () => {
     const webhookUrl = PACKAGE_WEBHOOK_URLS[packageKey];
     const addonLabels = selectedAddonLabels.map((addon) => addon.label);
-    try {
-      setSubmitting(true);
-      setError(null);
-      const payload = {
+    const buildPayload = (retryMode?: string) => {
+      const submittedAt = new Date().toISOString();
+      const fullName = `${state.agent.firstName} ${state.agent.lastName}`.trim();
+
+      return {
         form_type: "booking",
         website_booking_id: draftIdRef.current,
+        ...(retryMode ? { retry_mode: retryMode } : {}),
         package_name: packageKey,
+        package: packageInfo.name,
+        property_address: state.property.address,
+        sqft_tier: state.property.sqftTier,
+        selections: addonLabels,
+        schedule: {
+          preferredDate: state.scheduling.preferredDate,
+          preferredTime: state.scheduling.preferredTime,
+          backupDate: state.scheduling.backupDate,
+          notes: state.scheduling.notes,
+        },
+        contact: {
+          fullName,
+          first_name: state.agent.firstName,
+          last_name: state.agent.lastName,
+          email: state.agent.email,
+          phone: state.agent.phone,
+          brokerage: state.agent.brokerage,
+        },
+        access: {
+          vacancy: state.property.vacancy,
+          access: state.property.vacancy,
+          lockbox: "",
+          gate_code: "",
+        },
+        special_requests: state.scheduling.notes,
+        additional_info: state.scheduling.notes,
         agent: {
           first_name: state.agent.firstName,
           last_name: state.agent.lastName,
@@ -354,12 +382,20 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           marketing: state.smsConsents.marketing,
           transactional: state.smsConsents.transactional,
         },
+        submitted_at: submittedAt,
+        source_page: window.location.href,
         meta: {
           webhook_url: webhookUrl,
           source_page: window.location.href,
-          submitted_at: new Date().toISOString(),
+          submitted_at: submittedAt,
         },
       };
+    };
+
+    try {
+      setSubmitting(true);
+      setError(null);
+      const payload = buildPayload();
 
       sendBackupEmailFromPayload(payload, {
         source: "package_booking_form",
@@ -400,89 +436,13 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           mode: "no-cors",
           keepalive: true,
           headers: { "Content-Type": "text/plain;charset=UTF-8" },
-          body: JSON.stringify({
-            form_type: "booking",
-            website_booking_id: draftIdRef.current,
-            package_name: packageKey,
-            retry_mode: "no-cors-fallback",
-            agent: {
-              first_name: state.agent.firstName,
-              last_name: state.agent.lastName,
-              email: state.agent.email,
-              phone: state.agent.phone,
-              brokerage: state.agent.brokerage,
-            },
-            property: {
-              address: state.property.address,
-              unit: state.property.unit,
-              sqft_tier: state.property.sqftTier,
-              listing_price: state.property.listingPrice,
-              vacancy: state.property.vacancy,
-              shoot_basement: state.property.shootBasement,
-              shoot_garage: state.property.shootGarage,
-            },
-            addons: addonLabels,
-            estimated_total: estimatedTotal,
-            scheduling: {
-              preferred_date: state.scheduling.preferredDate,
-              preferred_time: state.scheduling.preferredTime,
-              backup_date: state.scheduling.backupDate,
-              notes: state.scheduling.notes,
-            },
-            sms_consents: {
-              marketing: state.smsConsents.marketing,
-              transactional: state.smsConsents.transactional,
-            },
-            meta: {
-              webhook_url: webhookUrl,
-              source_page: window.location.href,
-              submitted_at: new Date().toISOString(),
-            },
-          }),
+          body: JSON.stringify(buildPayload("no-cors-fallback")),
         });
       } catch {
         // Last-resort fire-and-forget fallback for browsers/networks that block cross-origin fetch.
         const ok = navigator.sendBeacon(
           webhookUrl,
-          JSON.stringify({
-            form_type: "booking",
-            website_booking_id: draftIdRef.current,
-            package_name: packageKey,
-            retry_mode: "sendBeacon-fallback",
-            agent: {
-              first_name: state.agent.firstName,
-              last_name: state.agent.lastName,
-              email: state.agent.email,
-              phone: state.agent.phone,
-              brokerage: state.agent.brokerage,
-            },
-            property: {
-              address: state.property.address,
-              unit: state.property.unit,
-              sqft_tier: state.property.sqftTier,
-              listing_price: state.property.listingPrice,
-              vacancy: state.property.vacancy,
-              shoot_basement: state.property.shootBasement,
-              shoot_garage: state.property.shootGarage,
-            },
-            addons: addonLabels,
-            estimated_total: estimatedTotal,
-            scheduling: {
-              preferred_date: state.scheduling.preferredDate,
-              preferred_time: state.scheduling.preferredTime,
-              backup_date: state.scheduling.backupDate,
-              notes: state.scheduling.notes,
-            },
-            sms_consents: {
-              marketing: state.smsConsents.marketing,
-              transactional: state.smsConsents.transactional,
-            },
-            meta: {
-              webhook_url: webhookUrl,
-              source_page: window.location.href,
-              submitted_at: new Date().toISOString(),
-            },
-          })
+          JSON.stringify(buildPayload("sendBeacon-fallback"))
         );
 
         if (!ok) {
