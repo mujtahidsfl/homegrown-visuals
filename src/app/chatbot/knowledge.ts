@@ -1,6 +1,5 @@
-import { PACKAGE_ADDONS, PACKAGE_DISPLAY, SQFT_TIER_OPTIONS } from "../booking/config";
-import { faqItems } from "../components/FAQSection";
 import type { ChatAction } from "./assistant";
+import { PRICING_SHEET, formatTieredPrices } from "./pricingSheet";
 
 export type KnowledgeChunk = {
   id: string;
@@ -9,62 +8,62 @@ export type KnowledgeChunk = {
   actions?: ChatAction[];
 };
 
-const serviceList = [
-  "Real estate photography",
-  "Property video tours",
-  "Drone and aerial media",
-  "Virtual staging",
-  "3D tours",
-  "Social media content",
-];
-
 export const KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
   {
     id: "services",
     title: "Services",
-    content: `Homegrown Visuals provides: ${serviceList.join(", ")}.`,
-    actions: [{ label: "Tell me about pricing", kind: "ask", prompt: "Show me pricing." }],
+    content:
+      "We offer real estate photo packages, Zillow Showcase, luxury packages, and ala carte add-ons (drone, videos, walkthroughs, highlight reels, and more). Tell me what you need and the property size (sqft) and I’ll point you to the right option.",
+    actions: [
+      { label: "Pricing", kind: "ask", prompt: "Show me pricing." },
+      { label: "Recommendations", kind: "ask", prompt: "Help me choose a package for a 2,300 sqft home." },
+    ],
   },
   {
     id: "pricing_overview",
     title: "Package Pricing",
-    content: `${PACKAGE_DISPLAY.standard.name}: ${PACKAGE_DISPLAY.standard.range}. ${PACKAGE_DISPLAY.zillow_showcase.name}: ${PACKAGE_DISPLAY.zillow_showcase.range}. ${PACKAGE_DISPLAY.luxury.name}: ${PACKAGE_DISPLAY.luxury.range}. Final pricing depends on square footage tier: ${SQFT_TIER_OPTIONS.map((x) => x.label).join(", ")}.`,
-    actions: [{ label: "Start Booking", href: "/services", kind: "link" }],
-  },
-  {
-    id: "standard_package",
-    title: PACKAGE_DISPLAY.standard.name,
-    content: `Includes: ${PACKAGE_DISPLAY.standard.includes.join(", ")}. Subtitle: ${PACKAGE_DISPLAY.standard.subtitle}.`,
-    actions: [{ label: "Book Standard", href: "/book/standard", kind: "link" }],
-  },
-  {
-    id: "zillow_package",
-    title: PACKAGE_DISPLAY.zillow_showcase.name,
-    content: `Includes: ${PACKAGE_DISPLAY.zillow_showcase.includes.join(", ")}. Subtitle: ${PACKAGE_DISPLAY.zillow_showcase.subtitle}.`,
-    actions: [{ label: "Book Zillow Showcase", href: "/book/zillow-showcase", kind: "link" }],
-  },
-  {
-    id: "luxury_package",
-    title: PACKAGE_DISPLAY.luxury.name,
-    content: `Includes: ${PACKAGE_DISPLAY.luxury.includes.join(", ")}. Subtitle: ${PACKAGE_DISPLAY.luxury.subtitle}.`,
-    actions: [{ label: "Book Luxury", href: "/book/luxury", kind: "link" }],
-  },
-  {
-    id: "addons",
-    title: "Add-ons",
-    content: `Add-ons can be selected during booking. Standard package has ${PACKAGE_ADDONS.standard.length} add-on options, Zillow Showcase has ${PACKAGE_ADDONS.zillow_showcase.length}, and Luxury has ${PACKAGE_ADDONS.luxury.length}.`,
-    actions: [{ label: "Compare Packages", kind: "ask", prompt: "Compare all three packages." }],
-  },
-  {
-    id: "faq",
-    title: "FAQ",
-    content: faqItems.map((f) => `${f.q} ${f.a}`).join(" "),
-    actions: [{ label: "Service Areas", kind: "ask", prompt: "What areas do you serve?" }],
+    content: [
+      ...PRICING_SHEET.packages.map(
+        (p) => `${p.name} — ${p.description ?? ""} (${p.prices ? formatTieredPrices(p.prices) : "Ask for pricing"})`.trim()
+      ),
+      "",
+      "Ala carte (high level):",
+      ...PRICING_SHEET.alaCarte
+        .filter((x) => x.prices || x.flatPrice)
+        .slice(0, 8)
+        .map((x) => (x.prices ? `${x.name}: ${formatTieredPrices(x.prices)}` : `${x.name}: $${x.flatPrice}`)),
+      "",
+      `${PRICING_SHEET.landPackage.name}: $${PRICING_SHEET.landPackage.flatPrice} — ${PRICING_SHEET.landPackage.description}`,
+    ].join("\n"),
+    actions: [{ label: "Help me choose", kind: "ask", prompt: "Help me choose a package. My home is 1,900 sqft." }],
   },
   {
     id: "areas",
     title: "Service Areas",
-    content: "Primary coverage includes Gulf Coast markets from Orange Beach, AL to Navarre, FL.",
+    content:
+      "We are based in Pensacola, FL but have team members up and down the coast so we can provide service from Orange Beach, AL to Destin, FL.",
+  },
+  {
+    id: "booking",
+    title: "How To Book",
+    content: "You should book directly in our online booking system on the Services page.",
+  },
+  {
+    id: "prep",
+    title: "How To Prepare",
+    content:
+      "We send you a checklist before every photoshoot, videoshoot, or social media service so we can align on your vision and prepare properly.",
+  },
+  {
+    id: "payment",
+    title: "How Payment Works",
+    content: "We send an invoice to your email when we deliver your media.",
+  },
+  {
+    id: "turnaround",
+    title: "Delivery Timelines",
+    content:
+      "Photography and 3D are typically next-day. Basic walkthroughs are next-day, cinematic videos are 3-4 days, and luxury agent reels are 3-5 days.",
   },
   {
     id: "sms_policy",

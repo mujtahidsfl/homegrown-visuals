@@ -9,7 +9,7 @@ const testimonials = [
   },
   {
     quote:
-      "They take the time to really understand your goals and put together a thoughtful, strategic approach to help you achieve them. Their work is professional, creative, and intentional. If you’re considering working with Homegrown, get on their calendar while you can—these guys have a very bright future ahead.",
+      "They take the time to really understand your goals and put together a thoughtful, strategic approach to help you achieve them. Their work is professional, creative, and intentional. If you’re considering working with Homegrown, get on their calendar while you can, these guys have a very bright future ahead.",
     author: "Jon S.",
     role: "Team Leader and Realtor",
   },
@@ -28,25 +28,14 @@ export function ClientTestimonialsSection() {
   return (
     <section className="bg-[#FFFFFF] py-14 sm:py-20 px-4 sm:px-8">
       <div className="max-w-[1394px] mx-auto">
-        <p
-          className="text-center text-[#C79D52] text-[12px] sm:text-[13px] tracking-[0.18em] uppercase"
-          style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
-        >
-          What Clients Say
-        </p>
-
         <h2
-          className="text-center text-[#1F2D5A] text-[36px] sm:text-[52px] mt-4"
-          style={{
-            fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif",
-            fontWeight: 600,
-            lineHeight: 1.08,
-          }}
+          className="text-center text-[#1F3A5F] text-[34px] sm:text-[48px] tracking-[0.06em] uppercase leading-[1.05]"
+          style={{ fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif", fontWeight: 700 }}
         >
-          Trusted by Top Agents
+          WHAT CLIENTS SAY
         </h2>
 
-        <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
+        <div className="mt-7 flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
           <a
             href={GOOGLE_REVIEWS_URL}
             target="_blank"
@@ -75,7 +64,7 @@ export function ClientTestimonialsSection() {
             >
               <div className="flex items-center gap-1.5">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} size={20} className="text-[#D8A244]" fill="#D8A244" />
+                  <Star key={i} size={20} className="text-[#1F3A5F]" fill="#1F3A5F" />
                 ))}
               </div>
 

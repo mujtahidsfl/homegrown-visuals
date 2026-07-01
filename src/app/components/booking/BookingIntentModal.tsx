@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { PACKAGE_DISPLAY, PACKAGE_ROUTE_MAP, type PackageKey } from "../../booking/config";
+import { sendBackupEmailFromPayload, sendGoogleSheetsFromPayload } from "../../backupEmail";
 
 type BookingIntentModalProps = {
   packageKey: PackageKey | null;
@@ -44,6 +45,28 @@ export function BookingIntentModal({ packageKey, onClose }: BookingIntentModalPr
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!validate()) return;
+
+    sendBackupEmailFromPayload(
+      {
+        form_type: "booking_intent",
+        package_name: PACKAGE_DISPLAY[packageKey].name,
+        full_name: fullName.trim(),
+        email: email.trim(),
+      },
+      {
+        source: "booking_intent_modal",
+        subject: `Backup Copy - ${PACKAGE_DISPLAY[packageKey].name} Booking Intent`,
+      },
+    );
+    sendGoogleSheetsFromPayload(
+      {
+        form_type: "booking_intent",
+        package_name: PACKAGE_DISPLAY[packageKey].name,
+        full_name: fullName.trim(),
+        email: email.trim(),
+      },
+      "booking_intent_modal",
+    );
 
     localStorage.setItem("hgv_lead_name", fullName.trim());
     localStorage.setItem("hgv_lead_email", email.trim());
@@ -139,4 +162,3 @@ export function BookingIntentModal({ packageKey, onClose }: BookingIntentModalPr
     </div>
   );
 }
-

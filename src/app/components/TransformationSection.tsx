@@ -1,13 +1,49 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { PACKAGE_DISPLAY, type PackageKey } from "../booking/config";
+import { sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
 import { BookingIntentModal } from "./booking/BookingIntentModal";
+
+const SOCIAL_MEDIA_WEBHOOK_URL = "https://hook.us2.make.com/im0m5469kvkslku9bfqqudvymgs1nq6x";
 
 const cards = [
   PACKAGE_DISPLAY.standard,
   PACKAGE_DISPLAY.zillow_showcase,
   PACKAGE_DISPLAY.luxury,
 ] as const;
+
+function sendWebhookCopy(form: HTMLFormElement, webhookUrl: string, source: string) {
+  const payload = new URLSearchParams();
+  const formData = new FormData(form);
+
+  formData.forEach((value, key) => {
+    if (typeof value === "string") {
+      payload.append(key, value);
+    }
+  });
+  payload.append("source", source);
+  payload.append("submitted_at", new Date().toISOString());
+
+  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+    const blob = new Blob([payload.toString()], {
+      type: "application/x-www-form-urlencoded;charset=UTF-8",
+    });
+    navigator.sendBeacon(webhookUrl, blob);
+    return;
+  }
+
+  fetch(webhookUrl, {
+    method: "POST",
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: payload.toString(),
+    keepalive: true,
+  }).catch(() => {
+    // noop: preserve primary form submission flow
+  });
+}
 
 export function TransformationSection() {
   const [activePackage, setActivePackage] = useState<PackageKey | null>(null);
@@ -30,7 +66,7 @@ export function TransformationSection() {
             className="inline-flex items-center px-4 py-1.5 rounded-full bg-white border border-[#1F3A5F]/10 text-[#1F3A5F] text-[12px]"
             style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
           >
-            Pricing
+            Services
           </p>
           <h2
             className="text-[#1F2D5A] text-[34px] sm:text-[50px] mt-5"
@@ -40,7 +76,7 @@ export function TransformationSection() {
               lineHeight: 1.1,
             }}
           >
-            Capture Every Angle.
+            OUTSTANDING MEDIA PRODUCES RESULTS.
           </h2>
           <p
             className="text-[#46506b] text-[16px] sm:text-[18px] max-w-[760px] mx-auto mt-4"
@@ -50,9 +86,7 @@ export function TransformationSection() {
               lineHeight: 1.65,
             }}
           >
-            Professional listing photos, drone shots, virtual twilights, and
-            more delivered within 24 hours. Choose the package that fits your
-            listing.
+            STRATEGIC CONTENT THAT CLOSES DEALS FASTER, KEEPS YOUR CALENDAR PACKED, AND MAKES YOUR NAME IMPOSSIBLE TO IGNORE.
           </p>
         </div>
 
@@ -98,7 +132,7 @@ export function TransformationSection() {
                   className="text-[15px] sm:text-[16px] mb-1.5 text-[#4a5269]"
                   style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
                 >
-                  /range
+                  /property size
                 </p>
               </div>
 
@@ -158,19 +192,154 @@ export function TransformationSection() {
           ))}
         </div>
 
-        <div className="text-center mt-9">
-          <p
-            className="text-[#555f76] text-[16px]"
-            style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
-          >
-            Read more about each plan's features
-          </p>
-          <button
-            className="mt-4 h-11 px-7 rounded-full bg-[#1F2D5A] text-white text-[14px] hover:bg-[#17254d] transition-colors"
-            style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
-          >
-            Compare plans
-          </button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 mt-5 sm:mt-6">
+          <article className="rounded-[24px] border p-6 sm:p-7 flex flex-col min-h-0 lg:min-h-[540px] bg-white border-[#e4e6ef] shadow-[0_4px_16px_rgba(31,58,95,0.06)]">
+            <span
+              className="inline-flex items-center px-3 py-1 rounded-full bg-[#eef3fb] border border-[#d7e0eb] text-[#1F2D5A] text-[12px] w-fit"
+              style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
+            >
+              Personal Branding
+            </span>
+            <h3
+              className="text-[#1F2D5A] text-[28px] sm:text-[32px] mt-4"
+              style={{
+                fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif",
+                fontWeight: 600,
+                lineHeight: 1.2,
+              }}
+            >
+              Agent On-Camera Luxury Reel
+            </h3>
+            <p
+              className="mt-5 text-[#1F2D5A] text-[32px] sm:text-[36px]"
+              style={{
+                fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif",
+                fontWeight: 500,
+                lineHeight: 1,
+              }}
+            >
+              Starting at $749
+            </p>
+            <div className="mt-5 space-y-2.5">
+              <p className="text-[#4b556c] text-[16px] sm:text-[18px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+                Stand out from every other agent.
+              </p>
+              <p className="text-[#4b556c] text-[16px] sm:text-[18px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+                - we create the script
+              </p>
+              <p className="text-[#4b556c] text-[16px] sm:text-[18px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+                - on-set professional coaching
+              </p>
+              <p className="text-[#4b556c] text-[16px] sm:text-[18px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+                - full editing and production
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActivePackage("luxury")}
+              className="mt-auto h-12 px-8 rounded-full border border-[#1F2D5A] bg-[#1F2D5A] text-white text-[14px] hover:bg-[#17254d] transition-colors"
+              style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
+            >
+              Book this package
+            </button>
+          </article>
+          <article className="rounded-[24px] border p-6 sm:p-7 flex flex-col min-h-0 lg:min-h-[540px] bg-white border-[#e4e6ef] shadow-[0_4px_16px_rgba(31,58,95,0.06)]">
+            <span
+              className="inline-flex items-center px-3 py-1 rounded-full bg-[#eef3fb] border border-[#d7e0eb] text-[#1F2D5A] text-[12px] w-fit"
+              style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
+            >
+              Personal Branding
+            </span>
+            <h3
+              className="text-[#1F2D5A] text-[28px] sm:text-[32px] mt-4"
+              style={{
+                fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif",
+                fontWeight: 600,
+                lineHeight: 1.2,
+              }}
+            >
+              Social Media Marketing Services
+            </h3>
+            <p
+              className="mt-4 text-[#4b556c] text-[15px] sm:text-[16px]"
+              style={{
+                fontFamily: "'Satoshi', sans-serif",
+                fontWeight: 400,
+                lineHeight: 1.65,
+              }}
+            >
+              We have you covered from social media ads that stop the scroll to full social media management and ad placement management. We have helped both local businesses and multi-state brands grow strong social audiences. If you're ready to grow your business's social media presence, fill out the form below and we will reach out shortly.
+            </p>
+
+            <form
+              action="https://formsubmit.co/homegrownventuresllc@gmail.com"
+              method="POST"
+              onSubmit={(event) => {
+                sendBackupEmailFromFormData(new FormData(event.currentTarget), {
+                  source: "services_social_media_marketing_form",
+                  subject: "Backup Copy - Social Media Marketing Services Inquiry",
+                });
+                sendGoogleSheetsFromFormData(new FormData(event.currentTarget), "services_social_media_marketing_form");
+                sendWebhookCopy(
+                  event.currentTarget,
+                  SOCIAL_MEDIA_WEBHOOK_URL,
+                  "services_social_media_marketing_form",
+                );
+              }}
+              className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5"
+            >
+              <input type="hidden" name="_subject" value="New Social Media Marketing Services Inquiry" />
+              <input type="hidden" name="_captcha" value="false" />
+              <input type="hidden" name="_template" value="table" />
+              <input
+                name="name"
+                required
+                placeholder="Name"
+                className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
+                style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
+              />
+              <input
+                name="business_name"
+                required
+                placeholder="Business Name"
+                className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
+                style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
+              />
+              <input
+                type="email"
+                name="email"
+                required
+                placeholder="Email"
+                className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
+                style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
+              />
+              <input
+                type="tel"
+                name="phone_number"
+                required
+                placeholder="Phone Number"
+                className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
+                style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
+              />
+              <textarea
+                name="reason_for_submitting"
+                required
+                placeholder="Reason for submitting"
+                rows={4}
+                className="sm:col-span-2 px-4 py-3 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A] resize-y"
+                style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
+              />
+              <div className="sm:col-span-2 mt-1">
+                <button
+                  type="submit"
+                  className="h-11 px-8 rounded-full border border-[#1F2D5A] bg-[#1F2D5A] text-white text-[14px] hover:bg-[#17254d] transition-colors"
+                  style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
+                >
+                  Contact us
+                </button>
+              </div>
+            </form>
+          </article>
         </div>
       </div>
 

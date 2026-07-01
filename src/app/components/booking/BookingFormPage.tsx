@@ -1,6 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { SiteNavbar } from "../SiteNavbar";
+import {
+  sendBackupEmailFromPayload,
+  sendBackupEmailFromPayloadKeepalive,
+  sendGoogleSheetsFromPayload,
+  sendGoogleSheetsFromPayloadKeepalive,
+} from "../../backupEmail";
+import { AddressAutocompleteInput } from "../AddressAutocompleteInput";
 import {
   BASE_PRICES,
   PACKAGE_ADDONS,
@@ -77,6 +84,15 @@ const initialState = (): BookingState => ({
 });
 
 const TODAY = new Date().toISOString().split("T")[0];
+const PACKAGE_DRAFT_STORAGE_PREFIX = "hgv_package_booking_draft_v1";
+
+const createDraftId = () => {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `draft-${Date.now()}`;
+  }
+};
 
 const currency = (n: number) => `$${n.toLocaleString()}`;
 
@@ -88,6 +104,10 @@ function addonPrice(addon: Addon, tier: SqftTierKey | "") {
 
 export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const navigate = useNavigate();
+  const draftRestoredRef = useRef(false);
+  const submissionFinalizedRef = useRef(false);
+  const abandonmentSentRef = useRef(false);
+  const draftIdRef = useRef(createDraftId());
   const [step, setStep] = useState(1);
   const [state, setState] = useState<BookingState>(initialState);
   const [submitting, setSubmitting] = useState(false);
@@ -117,9 +137,159 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const selectedAddonLabels = state.addons
     .map((id) => packageAddons.find((a) => a.id === id))
     .filter(Boolean) as Addon[];
+  const draftStorageKey = `${PACKAGE_DRAFT_STORAGE_PREFIX}_${packageKey}`;
 
   const update = <K extends keyof BookingState>(key: K, value: BookingState[K]) =>
     setState((prev) => ({ ...prev, [key]: value }));
+
+  const clearDraft = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(draftStorageKey);
+    }
+    abandonmentSentRef.current = false;
+    draftIdRef.current = createDraftId();
+  };
+
+  const buildAbandonmentPayload = () => ({
+    form_type: "abandoned_booking_draft",
+    abandonment_status: "incomplete",
+    draft_id: draftIdRef.current,
+    package_name: packageInfo.name,
+    package_key: packageKey,
+    current_step: step,
+    agent: {
+      first_name: state.agent.firstName,
+      last_name: state.agent.lastName,
+      email: state.agent.email,
+      phone: state.agent.phone,
+      brokerage: state.agent.brokerage,
+    },
+    property: {
+      address: state.property.address,
+      unit: state.property.unit,
+      sqft_tier: state.property.sqftTier,
+      listing_price: state.property.listingPrice,
+      vacancy: state.property.vacancy,
+      shoot_basement: state.property.shootBasement,
+      shoot_garage: state.property.shootGarage,
+    },
+    addons: selectedAddonLabels.map((addon) => addon.label),
+    scheduling: {
+      preferred_date: state.scheduling.preferredDate,
+      preferred_time: state.scheduling.preferredTime,
+      backup_date: state.scheduling.backupDate,
+      notes: state.scheduling.notes,
+    },
+    sms_consents: {
+      marketing: state.smsConsents.marketing,
+      transactional: state.smsConsents.transactional,
+    },
+    estimated_total: estimatedTotal,
+    source_page: window.location.href,
+    submitted_at: new Date().toISOString(),
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || draftRestoredRef.current) return;
+
+    draftRestoredRef.current = true;
+
+    const rawDraft = localStorage.getItem(draftStorageKey);
+    if (!rawDraft) return;
+
+    try {
+      const draft = JSON.parse(rawDraft) as Record<string, any>;
+      if (draft.draft_id) {
+        draftIdRef.current = draft.draft_id;
+      }
+      if (typeof draft.step === "number") {
+        setStep(draft.step);
+      }
+      if (draft.state) {
+        setState(draft.state as BookingState);
+      }
+    } catch {
+      localStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !draftRestoredRef.current) return;
+
+    const hasMeaningfulProgress =
+      step > 1 ||
+      Boolean(
+        state.agent.firstName.trim() ||
+          state.agent.lastName.trim() ||
+          state.agent.email.trim() ||
+          state.agent.phone.trim() ||
+          state.property.address.trim(),
+      );
+
+    if (!hasMeaningfulProgress) {
+      localStorage.removeItem(draftStorageKey);
+      return;
+    }
+
+    localStorage.setItem(
+      draftStorageKey,
+      JSON.stringify({
+        draft_id: draftIdRef.current,
+        saved_at: new Date().toISOString(),
+        package_key: packageKey,
+        step,
+        state,
+      }),
+    );
+
+    abandonmentSentRef.current = false;
+  }, [draftStorageKey, packageKey, state, step]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const hasMeaningfulProgress =
+      step > 1 ||
+      Boolean(
+        state.agent.firstName.trim() ||
+          state.agent.lastName.trim() ||
+          state.agent.email.trim() ||
+          state.agent.phone.trim() ||
+          state.property.address.trim(),
+      );
+
+    const handleAbandonment = () => {
+      if (
+        submissionFinalizedRef.current ||
+        abandonmentSentRef.current ||
+        !hasMeaningfulProgress
+      ) {
+        return;
+      }
+
+      abandonmentSentRef.current = true;
+      const payload = buildAbandonmentPayload();
+      sendBackupEmailFromPayloadKeepalive(payload, {
+        source: "package_booking_form_abandoned",
+        subject: `Abandoned ${packageInfo.name} Booking Draft`,
+      });
+      sendGoogleSheetsFromPayloadKeepalive(payload, "package_booking_form_abandoned");
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        handleAbandonment();
+      }
+    };
+
+    window.addEventListener("pagehide", handleAbandonment);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", handleAbandonment);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [estimatedTotal, packageInfo.name, state, step]);
 
   const next = () => {
     if (step === 1) {
@@ -148,11 +318,13 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
 
   const submit = async () => {
     const webhookUrl = PACKAGE_WEBHOOK_URLS[packageKey];
+    const addonLabels = selectedAddonLabels.map((addon) => addon.label);
     try {
       setSubmitting(true);
       setError(null);
       const payload = {
         form_type: "booking",
+        website_booking_id: draftIdRef.current,
         package_name: packageKey,
         agent: {
           first_name: state.agent.firstName,
@@ -170,7 +342,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           shoot_basement: state.property.shootBasement,
           shoot_garage: state.property.shootGarage,
         },
-        addons: state.addons,
+        addons: addonLabels,
         estimated_total: estimatedTotal,
         scheduling: {
           preferred_date: state.scheduling.preferredDate,
@@ -189,6 +361,12 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         },
       };
 
+      sendBackupEmailFromPayload(payload, {
+        source: "package_booking_form",
+        subject: `Backup Copy - ${packageInfo.name} Booking`,
+      });
+      sendGoogleSheetsFromPayload(payload, "package_booking_form");
+
       const response = await fetch(webhookUrl, {
         method: "POST",
         keepalive: true,
@@ -199,6 +377,8 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         throw new Error(`Webhook failed with status ${response.status}`);
       }
 
+      submissionFinalizedRef.current = true;
+      clearDraft();
       localStorage.setItem("hgv_lead_email", state.agent.email);
       localStorage.setItem(
         "hgv_booking_summary",
@@ -222,6 +402,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           headers: { "Content-Type": "text/plain;charset=UTF-8" },
           body: JSON.stringify({
             form_type: "booking",
+            website_booking_id: draftIdRef.current,
             package_name: packageKey,
             retry_mode: "no-cors-fallback",
             agent: {
@@ -240,7 +421,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
               shoot_basement: state.property.shootBasement,
               shoot_garage: state.property.shootGarage,
             },
-            addons: state.addons,
+            addons: addonLabels,
             estimated_total: estimatedTotal,
             scheduling: {
               preferred_date: state.scheduling.preferredDate,
@@ -265,6 +446,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           webhookUrl,
           JSON.stringify({
             form_type: "booking",
+            website_booking_id: draftIdRef.current,
             package_name: packageKey,
             retry_mode: "sendBeacon-fallback",
             agent: {
@@ -283,7 +465,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
               shoot_basement: state.property.shootBasement,
               shoot_garage: state.property.shootGarage,
             },
-            addons: state.addons,
+            addons: addonLabels,
             estimated_total: estimatedTotal,
             scheduling: {
               preferred_date: state.scheduling.preferredDate,
@@ -342,9 +524,6 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           <div className="h-2 bg-[#e7edf5] rounded-full overflow-hidden">
             <div className="h-full bg-[#2FA4A9] transition-all" style={{ width: `${(step / 5) * 100}%` }} />
           </div>
-          <p className="mt-3 text-[#51607b] text-[14px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
-            Your project details are submitted. Choose your preferred time below and our team will reach out to confirm exact time shortly.
-          </p>
         </div>
 
         <div className="mt-6 bg-white border border-[#dbe3ef] rounded-[20px] p-6 sm:p-8 shadow-[0_14px_30px_rgba(31,58,95,0.08)]">
@@ -418,7 +597,12 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
             <div className="space-y-4">
               <h2 className="text-[#1F3A5F] text-[34px]" style={{ fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif", fontWeight: 600 }}>About the property</h2>
               <div className="grid sm:grid-cols-2 gap-4">
-                <input placeholder="Property Address" value={state.property.address} onChange={(e) => update("property", { ...state.property, address: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] sm:col-span-2" />
+                <AddressAutocompleteInput
+                  placeholder="Property Address"
+                  value={state.property.address}
+                  onChange={(address) => update("property", { ...state.property, address })}
+                  className="h-12 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] sm:col-span-2"
+                />
                 <input placeholder="Unit Number (optional)" value={state.property.unit} onChange={(e) => update("property", { ...state.property, unit: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
                 <select value={state.property.sqftTier} onChange={(e) => update("property", { ...state.property, sqftTier: e.target.value as SqftTierKey })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]">
                   <option value="">Square Footage</option>
@@ -442,15 +626,10 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                     <p className="text-[#1F3A5F] font-semibold mb-3">{category}</p>
                     <div className="space-y-2.5">
                       {addons.map((addon) => (
-                        <label key={addon.id} className="flex items-start justify-between gap-3 text-[14px]">
-                          <span className="flex items-start gap-2">
-                            <input type="checkbox" className="mt-1" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
-                            <span>
-                              <span className="block">{addon.label}</span>
-                              {addon.description && (
-                                <span className="mt-1 block text-[12px] leading-5 text-[#6a7891]">{addon.description}</span>
-                              )}
-                            </span>
+                        <label key={addon.id} className="flex items-center justify-between gap-3 text-[14px]">
+                          <span className="flex items-center gap-2">
+                            <input type="checkbox" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
+                            {addon.label}
                           </span>
                           <span className="text-[#1F3A5F] font-semibold">{currency(addonPrice(addon, state.property.sqftTier))}</span>
                         </label>

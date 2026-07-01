@@ -113,7 +113,7 @@ export function WhyHGVSection() {
           className="flex gap-6 overflow-x-auto pb-6 pt-4 items-end"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {/* Card 1 — Image (drone) */}
+          {/* Card 1, Image (drone) */}
           <div
             ref={(el) => { cardRefs.current[0] = el; }}
             className={cardClass(
@@ -138,7 +138,7 @@ export function WhyHGVSection() {
             </p>
           </div>
 
-          {/* Card 2 — Teal info card */}
+          {/* Card 2, Teal info card */}
           <div
             ref={(el) => { cardRefs.current[1] = el; }}
             className={cardClass(
@@ -185,7 +185,7 @@ export function WhyHGVSection() {
             </p>
           </div>
 
-          {/* Card 3 — Image (photographer) */}
+          {/* Card 3, Image (photographer) */}
           <div
             ref={(el) => { cardRefs.current[2] = el; }}
             className={cardClass(
@@ -201,7 +201,7 @@ export function WhyHGVSection() {
             />
           </div>
 
-          {/* Card 4 — Stat card */}
+          {/* Card 4, Stat card */}
           <div
             ref={(el) => { cardRefs.current[3] = el; }}
             className={cardClass(
@@ -249,7 +249,7 @@ export function WhyHGVSection() {
             </div>
           </div>
 
-          {/* Card 5 — Teal info card 2 */}
+          {/* Card 5, Teal info card 2 */}
           <div
             ref={(el) => { cardRefs.current[4] = el; }}
             className={cardClass(
@@ -272,12 +272,12 @@ export function WhyHGVSection() {
             >
               Photo, video, drone &amp; virtual tours{" "}
               <span className="text-white/70" style={{ fontWeight: 400, fontFamily: "'Satoshi', sans-serif" }}>
-                all from one team. No juggling vendors — we handle every angle in a single visit.
+                all from one team. No juggling vendors, we handle every angle in a single visit.
               </span>
             </p>
           </div>
 
-          {/* Card 6 — Image (beach house) */}
+          {/* Card 6, Image (beach house) */}
           <div
             ref={(el) => { cardRefs.current[5] = el; }}
             className={cardClass(
@@ -302,7 +302,7 @@ export function WhyHGVSection() {
             </div>
           </div>
 
-          {/* Card 7 — Stat card 2 */}
+          {/* Card 7, Stat card 2 */}
           <div
             ref={(el) => { cardRefs.current[6] = el; }}
             className={cardClass(
@@ -364,7 +364,7 @@ export function WhyHGVSection() {
             style={{ fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif", fontWeight: 700, lineHeight: 1.35 }}
           >
             <span className="text-[#2FA4A9] mr-2" style={{ fontSize: "32px" }}>"</span>
-            We don't just photograph properties — we tell the story of how it feels to live there,{" "}
+            We don't just photograph properties, we tell the story of how it feels to live there,{" "}
             <span className="text-[#3D5A80]/60" style={{ fontWeight: 400, fontFamily: "'Satoshi', sans-serif" }}>
               creating content that stops the scroll and starts the conversation.
             </span>

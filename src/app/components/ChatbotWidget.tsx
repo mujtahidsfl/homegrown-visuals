@@ -16,10 +16,10 @@ export function ChatbotWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      text: "Hi, I’m the Homegrown Visuals AI assistant. Ask me about services, packages, add-ons, FAQs, or booking.",
+      text: "Hey there! Welcome to Homegrown Visuals — I’m HGV Assistant. I can help with services, pricing, coverage area, turnaround times, and booking.",
       actions: [
         { label: "Pricing", kind: "ask", prompt: "Show me pricing." },
-        { label: "Start Booking", href: "/services", kind: "link" },
+        { label: "Book with us", kind: "link", href: "/services" },
       ],
     },
   ]);
@@ -82,12 +82,6 @@ export function ChatbotWidget() {
 
     if (!action.href) return;
 
-    // Keep pricing inside chat unless user explicitly starts booking.
-    if (action.href === "/services" && !/book/i.test(action.label)) {
-      await sendWithText("Show me pricing.");
-      return;
-    }
-
     if (action.href.startsWith("/book/") || /book/i.test(action.label)) {
       setPendingBookingHref(action.href);
       setMessages((prev) => [
@@ -113,7 +107,7 @@ export function ChatbotWidget() {
         <div className="fixed bottom-24 right-4 sm:right-6 z-[140] w-[92vw] max-w-[390px] h-[560px] max-h-[72vh] rounded-[18px] border border-[#d9e2ef] bg-white shadow-[0_20px_50px_rgba(18,35,64,0.22)] flex flex-col overflow-hidden">
           <div className="h-14 px-4 border-b border-[#e4ebf5] flex items-center justify-between bg-[#f6faff]">
             <p className="text-[#1F3A5F] text-[14px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}>
-              Homegrown Visuals AI
+              HGV Assistant
             </p>
             <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-full hover:bg-[#e9f1fb] flex items-center justify-center">
               <X size={16} className="text-[#1F3A5F]" />

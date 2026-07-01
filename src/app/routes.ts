@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { createElement } from "react";
 import { HomePage } from "./components/HomePage";
 import { BookingFormPage } from "./components/booking/BookingFormPage";
@@ -9,6 +9,7 @@ import { PortfolioPage } from "./components/PortfolioPage";
 import { PricingPage } from "./components/PricingPage";
 import { AboutPage } from "./components/AboutPage";
 import { AppShell } from "./components/AppShell";
+import { CalendarTestPage } from "./components/CalendarTestPage";
 
 export const router = createBrowserRouter([
   {
@@ -36,6 +37,10 @@ export const router = createBrowserRouter([
         element: createElement(ConfirmationPage),
       },
       {
+        path: "booking-confirmed",
+        element: createElement(ConfirmationPage),
+      },
+      {
         path: "privacy-policy",
         element: createElement(PrivacyPolicyPage),
       },
@@ -58,6 +63,14 @@ export const router = createBrowserRouter([
       {
         path: "about",
         element: createElement(AboutPage),
+      },
+      {
+        path: "calendar-test",
+        element: createElement(CalendarTestPage),
+      },
+      {
+        path: "faq",
+        element: createElement(Navigate, { to: "/#faq", replace: true }),
       },
     ],
   },

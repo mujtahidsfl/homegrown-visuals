@@ -61,7 +61,6 @@ export const PACKAGE_DISPLAY = {
 export type Addon = {
   id: string;
   label: string;
-  description?: string;
   category: string;
   pricingType: "flat" | "sqft";
   flatPrice?: number;
@@ -78,28 +77,14 @@ const SQFT_PRICING = (a: number, b: number, c: number, d: number) => ({
 const STANDARD_ADDONS: Addon[] = [
   { id: "drone_6", label: "6 Drone Photos", category: "Drone & Aerial", pricingType: "flat", flatPrice: 129 },
   { id: "drone_12", label: "12 Drone Photos", category: "Drone & Aerial", pricingType: "flat", flatPrice: 199 },
-  {
-    id: "drone_video_30",
-    label: "30sec Drone-Only Video",
-    description: "showcasing surrounding area and exterior of property (no agent on-camera)",
-    category: "Drone & Aerial",
-    pricingType: "flat",
-    flatPrice: 249,
-  },
+  { id: "drone_video_30", label: "30sec Drone-Only Video", category: "Drone & Aerial", pricingType: "flat", flatPrice: 249 },
   { id: "twilight_1", label: "1 Virtual Twilight Photo", category: "Virtual Twilight", pricingType: "flat", flatPrice: 29 },
   { id: "twilight_2", label: "2 Virtual Twilight Photos", category: "Virtual Twilight", pricingType: "flat", flatPrice: 49 },
   { id: "twilight_4", label: "4 Virtual Twilight Photos", category: "Virtual Twilight", pricingType: "flat", flatPrice: 89 },
   { id: "detail_5", label: "Detail Photos (5)", category: "Detail Photos", pricingType: "flat", flatPrice: 39 },
   { id: "detail_10", label: "Detail Photos (10)", category: "Detail Photos", pricingType: "flat", flatPrice: 59 },
   { id: "detail_20", label: "Detail Photos (20)", category: "Detail Photos", pricingType: "flat", flatPrice: 109 },
-  {
-    id: "sm_reel_1",
-    label: "15-30sec Social Media Reel",
-    description: "highlight reel with agent on-camera",
-    category: "Video / Reels",
-    pricingType: "flat",
-    flatPrice: 389,
-  },
+  { id: "sm_reel_1", label: "15-30sec Social Media Reel", category: "Video / Reels", pricingType: "flat", flatPrice: 389 },
   { id: "sm_reel_2", label: "Two 15-30sec SM Reels", category: "Video / Reels", pricingType: "flat", flatPrice: 699 },
   { id: "stage_1", label: "Virtual Staging - 1 Room", category: "Virtual Staging", pricingType: "flat", flatPrice: 30 },
   { id: "stage_2", label: "Virtual Staging - 2 Rooms", category: "Virtual Staging", pricingType: "flat", flatPrice: 50 },
@@ -108,30 +93,9 @@ const STANDARD_ADDONS: Addon[] = [
 ];
 
 const ZILLOW_ONLY: Addon[] = [
-  {
-    id: "cinematic_video",
-    label: "Cinematic Video (45-60sec)",
-    description: "intentionally crafted, luxury property showcase (no agent on-camera)",
-    category: "Cinematic Video",
-    pricingType: "sqft",
-    sqftPrices: SQFT_PRICING(376, 389, 409, 479),
-  },
-  {
-    id: "twilight_session_photo",
-    label: "Twilight Photo Session",
-    description: "Twilight Photo Session",
-    category: "Twilight Sessions",
-    pricingType: "flat",
-    flatPrice: 289,
-  },
-  {
-    id: "twilight_session_full",
-    label: "Twilight Session",
-    description: "our basic video walking through the property (no agent on-camera)",
-    category: "Twilight Sessions",
-    pricingType: "flat",
-    flatPrice: 299,
-  },
+  { id: "cinematic_video", label: "Cinematic Video (45-60sec)", category: "Cinematic Video", pricingType: "sqft", sqftPrices: SQFT_PRICING(376, 389, 409, 479) },
+  { id: "twilight_session_photo", label: "Twilight Photo Session", category: "Twilight Sessions", pricingType: "flat", flatPrice: 289 },
+  { id: "twilight_session_full", label: "Twilight Session", category: "Twilight Sessions", pricingType: "flat", flatPrice: 299 },
   { id: "community_amenities", label: "Community Amenity Photos", category: "Specialty", pricingType: "flat", flatPrice: 54 },
 ];
 
@@ -139,14 +103,7 @@ const LUXURY_ONLY: Addon[] = [
   { id: "luxury_area", label: "Luxury Reel + Surrounding Area", category: "Luxury Reel Upgrades", pricingType: "flat", flatPrice: 749 },
   { id: "luxury_ai", label: "Luxury Reel + AI", category: "Luxury Reel Upgrades", pricingType: "flat", flatPrice: 749 },
   { id: "luxury_day_night", label: "Luxury Reel + Day-to-Night", category: "Luxury Reel Upgrades", pricingType: "flat", flatPrice: 949 },
-  {
-    id: "sm_reel_3",
-    label: "Three 15-30sec SM Reels",
-    description: "highlight reel with agent on-camera",
-    category: "Additional Reels",
-    pricingType: "flat",
-    flatPrice: 979,
-  },
+  { id: "sm_reel_3", label: "Three 15-30sec SM Reels", category: "Additional Reels", pricingType: "flat", flatPrice: 979 },
   { id: "sm_reel_5", label: "Five 15-30sec SM Reels", category: "Additional Reels", pricingType: "flat", flatPrice: 1499 },
   { id: "landmarks", label: "Landmarks", category: "Specialty", pricingType: "flat", flatPrice: 25 },
 ];
@@ -164,3 +121,4 @@ export const PACKAGE_ADDONS: Record<PackageKey, Addon[]> = {
 };
 
 export const WEBHOOK_URL = "https://YOUR_WEBHOOK_URL_HERE";
+

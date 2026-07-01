@@ -215,9 +215,6 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           <div className="h-2 bg-[#e7edf5] rounded-full overflow-hidden">
             <div className="h-full bg-[#2FA4A9] transition-all" style={{ width: `${(step / 5) * 100}%` }} />
           </div>
-          <p className="mt-3 text-[#51607b] text-[14px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
-            Your project details are submitted. Choose your preferred time below and our team will reach out to confirm exact time shortly.
-          </p>
         </div>
 
         <div className="mt-6 bg-white border border-[#dbe3ef] rounded-[20px] p-6 sm:p-8 shadow-[0_14px_30px_rgba(31,58,95,0.08)]">
@@ -272,15 +269,10 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                     <p className="text-[#1F3A5F] font-semibold mb-3">{category}</p>
                     <div className="space-y-2.5">
                       {addons.map((addon) => (
-                        <label key={addon.id} className="flex items-start justify-between gap-3 text-[14px]">
-                          <span className="flex items-start gap-2">
-                            <input type="checkbox" className="mt-1" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
-                            <span>
-                              <span className="block">{addon.label}</span>
-                              {addon.description && (
-                                <span className="mt-1 block text-[12px] leading-5 text-[#6a7891]">{addon.description}</span>
-                              )}
-                            </span>
+                        <label key={addon.id} className="flex items-center justify-between gap-3 text-[14px]">
+                          <span className="flex items-center gap-2">
+                            <input type="checkbox" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
+                            {addon.label}
                           </span>
                           <span className="text-[#1F3A5F] font-semibold">{currency(addonPrice(addon, state.property.sqftTier))}</span>
                         </label>
@@ -358,3 +350,4 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
     </section>
   );
 }
+

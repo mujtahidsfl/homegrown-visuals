@@ -20,7 +20,7 @@ const steps = [
     step: "03",
     title: "Get Your Media Fast",
     description:
-      "Edited and polished photos delivered to your inbox next day. Plus, our professional video content gets delivered within days, not weeks. Your listings are time-sensitive, and we understand the importance of marketing while buyer interest is hot.",
+      "Edited, polished, and delivered to your inbox within 24–48 hours. Download, share, and start marketing your listing immediately.",
   },
 ];
 
