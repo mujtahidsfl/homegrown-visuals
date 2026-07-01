@@ -1,0 +1,360 @@
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import {
+  BASE_PRICES,
+  PACKAGE_ADDONS,
+  PACKAGE_DISPLAY,
+  SQFT_TIER_OPTIONS,
+  WEBHOOK_URL,
+  type Addon,
+  type PackageKey,
+  type SqftTierKey,
+} from "../../booking/config";
+
+type BookingFormPageProps = {
+  packageKey: PackageKey;
+};
+
+type BookingState = {
+  agent: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    brokerage: string;
+  };
+  property: {
+    address: string;
+    unit: string;
+    sqftTier: SqftTierKey | "";
+    listingPrice: string;
+    vacancy: string;
+    shootBasement: string;
+    shootGarage: string;
+  };
+  addons: string[];
+  scheduling: {
+    preferredDate: string;
+    preferredTime: string;
+    backupDate: string;
+    notes: string;
+  };
+};
+
+const initialState = (): BookingState => ({
+  agent: {
+    firstName: (localStorage.getItem("hgv_lead_name") ?? "").split(" ")[0] ?? "",
+    lastName: (localStorage.getItem("hgv_lead_name") ?? "").split(" ").slice(1).join(" "),
+    email: localStorage.getItem("hgv_lead_email") ?? "",
+    phone: "",
+    brokerage: "",
+  },
+  property: {
+    address: "",
+    unit: "",
+    sqftTier: "",
+    listingPrice: "",
+    vacancy: "",
+    shootBasement: "",
+    shootGarage: "",
+  },
+  addons: [],
+  scheduling: {
+    preferredDate: "",
+    preferredTime: "",
+    backupDate: "",
+    notes: "",
+  },
+});
+
+const TODAY = new Date().toISOString().split("T")[0];
+
+const currency = (n: number) => `$${n.toLocaleString()}`;
+
+function addonPrice(addon: Addon, tier: SqftTierKey | "") {
+  if (addon.pricingType === "flat") return addon.flatPrice ?? 0;
+  if (!tier || !addon.sqftPrices) return 0;
+  return addon.sqftPrices[tier] ?? 0;
+}
+
+export function BookingFormPage({ packageKey }: BookingFormPageProps) {
+  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+  const [state, setState] = useState<BookingState>(initialState);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const packageInfo = PACKAGE_DISPLAY[packageKey];
+  const packageAddons = PACKAGE_ADDONS[packageKey];
+
+  const groupedAddons = useMemo(() => {
+    const map = new Map<string, Addon[]>();
+    packageAddons.forEach((addon) => {
+      const current = map.get(addon.category) ?? [];
+      current.push(addon);
+      map.set(addon.category, current);
+    });
+    return Array.from(map.entries());
+  }, [packageAddons]);
+
+  const basePrice = state.property.sqftTier ? BASE_PRICES[packageKey][state.property.sqftTier] : 0;
+  const addonTotal = state.addons.reduce((sum, id) => {
+    const addon = packageAddons.find((a) => a.id === id);
+    if (!addon) return sum;
+    return sum + addonPrice(addon, state.property.sqftTier);
+  }, 0);
+  const estimatedTotal = basePrice + addonTotal;
+
+  const selectedAddonLabels = state.addons
+    .map((id) => packageAddons.find((a) => a.id === id))
+    .filter(Boolean) as Addon[];
+
+  const update = <K extends keyof BookingState>(key: K, value: BookingState[K]) =>
+    setState((prev) => ({ ...prev, [key]: value }));
+
+  const next = () => {
+    if (step === 1) {
+      const { firstName, lastName, email, phone } = state.agent;
+      if (!firstName || !lastName || !email || !phone) return;
+    }
+    if (step === 2) {
+      const { address, sqftTier, vacancy, shootBasement, shootGarage } = state.property;
+      if (!address || !sqftTier || !vacancy || !shootBasement || !shootGarage) return;
+    }
+    if (step === 4) {
+      const { preferredDate, preferredTime } = state.scheduling;
+      if (!preferredDate || !preferredTime) return;
+    }
+    setStep((s) => Math.min(5, s + 1));
+  };
+
+  const prev = () => setStep((s) => Math.max(1, s - 1));
+
+  const toggleAddon = (id: string) => {
+    setState((prev) => {
+      const exists = prev.addons.includes(id);
+      return { ...prev, addons: exists ? prev.addons.filter((x) => x !== id) : [...prev.addons, id] };
+    });
+  };
+
+  const submit = async () => {
+    try {
+      setSubmitting(true);
+      setError(null);
+      const payload = {
+        form_type: "booking",
+        package_name: packageKey,
+        agent: {
+          first_name: state.agent.firstName,
+          last_name: state.agent.lastName,
+          email: state.agent.email,
+          phone: state.agent.phone,
+          brokerage: state.agent.brokerage,
+        },
+        property: {
+          address: state.property.address,
+          unit: state.property.unit,
+          sqft_tier: state.property.sqftTier,
+          listing_price: state.property.listingPrice,
+          vacancy: state.property.vacancy,
+          shoot_basement: state.property.shootBasement,
+          shoot_garage: state.property.shootGarage,
+        },
+        addons: state.addons,
+        estimated_total: estimatedTotal,
+        scheduling: {
+          preferred_date: state.scheduling.preferredDate,
+          preferred_time: state.scheduling.preferredTime,
+          backup_date: state.scheduling.backupDate,
+          notes: state.scheduling.notes,
+        },
+        meta: {
+          source_page: window.location.href,
+          submitted_at: new Date().toISOString(),
+        },
+      };
+
+      await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      localStorage.setItem("hgv_lead_email", state.agent.email);
+      localStorage.setItem(
+        "hgv_booking_summary",
+        JSON.stringify({
+          package_name: packageInfo.name,
+          address: state.property.address,
+          shoot_date: state.scheduling.preferredDate,
+          shoot_time: state.scheduling.preferredTime,
+          estimated_total: estimatedTotal,
+        })
+      );
+
+      navigate("/confirmation");
+    } catch (e) {
+      setError("We couldn't submit the form right now. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="min-h-screen bg-[#f4f8fc] pb-40">
+      <div className="max-w-[1120px] mx-auto px-4 sm:px-8 pt-8 sm:pt-10">
+        <div className="bg-white border border-[#dbe3ef] rounded-[16px] p-4 sm:p-5 shadow-[0_8px_20px_rgba(31,58,95,0.08)]">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-[#1F3A5F] text-[14px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}>
+              {packageInfo.name}
+            </p>
+            <p className="text-[#1F3A5F]/70 text-[13px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 600 }}>
+              Step {step} of 5
+            </p>
+          </div>
+          <div className="h-2 bg-[#e7edf5] rounded-full overflow-hidden">
+            <div className="h-full bg-[#2FA4A9] transition-all" style={{ width: `${(step / 5) * 100}%` }} />
+          </div>
+          <p className="mt-3 text-[#51607b] text-[14px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+            Your project details are submitted. Choose your preferred time below and our team will reach out to confirm exact time shortly.
+          </p>
+        </div>
+
+        <div className="mt-6 bg-white border border-[#dbe3ef] rounded-[20px] p-6 sm:p-8 shadow-[0_14px_30px_rgba(31,58,95,0.08)]">
+          {step === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-[#1F3A5F] text-[34px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>Tell us about yourself</h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {([
+                  ["firstName", "First Name", state.agent.firstName],
+                  ["lastName", "Last Name", state.agent.lastName],
+                  ["email", "Email", state.agent.email],
+                  ["phone", "Phone Number", state.agent.phone],
+                  ["brokerage", "Brokerage Name", state.agent.brokerage],
+                ] as const).map(([key, label, value]) => (
+                  <input
+                    key={key}
+                    placeholder={label}
+                    value={value}
+                    onChange={(e) => update("agent", { ...state.agent, [key]: e.target.value })}
+                    className="h-12 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9]"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <h2 className="text-[#1F3A5F] text-[34px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>About the property</h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <input placeholder="Property Address" value={state.property.address} onChange={(e) => update("property", { ...state.property, address: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] sm:col-span-2" />
+                <input placeholder="Unit Number (optional)" value={state.property.unit} onChange={(e) => update("property", { ...state.property, unit: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
+                <select value={state.property.sqftTier} onChange={(e) => update("property", { ...state.property, sqftTier: e.target.value as SqftTierKey })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]">
+                  <option value="">Square Footage</option>
+                  {SQFT_TIER_OPTIONS.map((tier) => <option key={tier.key} value={tier.key}>{tier.label}</option>)}
+                </select>
+                <input placeholder="Listing Price" value={state.property.listingPrice} onChange={(e) => update("property", { ...state.property, listingPrice: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
+                <select value={state.property.vacancy} onChange={(e) => update("property", { ...state.property, vacancy: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]"><option value="">Vacancy Status</option><option>Occupied</option><option>Vacant</option></select>
+                <select value={state.property.shootBasement} onChange={(e) => update("property", { ...state.property, shootBasement: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]"><option value="">Shoot Basement?</option><option>Yes</option><option>No</option></select>
+                <select value={state.property.shootGarage} onChange={(e) => update("property", { ...state.property, shootGarage: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]"><option value="">Shoot Garage Interior?</option><option>Yes</option><option>No</option></select>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <h2 className="text-[#1F3A5F] text-[34px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>Customize your shoot</h2>
+              <p className="text-[#51607b] mt-2">All prices update based on your square footage selection.</p>
+              <div className="mt-5 grid md:grid-cols-2 gap-5">
+                {groupedAddons.map(([category, addons]) => (
+                  <div key={category} className="border border-[#dbe3ef] rounded-[14px] p-4">
+                    <p className="text-[#1F3A5F] font-semibold mb-3">{category}</p>
+                    <div className="space-y-2.5">
+                      {addons.map((addon) => (
+                        <label key={addon.id} className="flex items-start justify-between gap-3 text-[14px]">
+                          <span className="flex items-start gap-2">
+                            <input type="checkbox" className="mt-1" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
+                            <span>
+                              <span className="block">{addon.label}</span>
+                              {addon.description && (
+                                <span className="mt-1 block text-[12px] leading-5 text-[#6a7891]">{addon.description}</span>
+                              )}
+                            </span>
+                          </span>
+                          <span className="text-[#1F3A5F] font-semibold">{currency(addonPrice(addon, state.property.sqftTier))}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-4">
+              <h2 className="text-[#1F3A5F] text-[34px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>When would you like us there?</h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <input type="date" min={TODAY} value={state.scheduling.preferredDate} onChange={(e) => update("scheduling", { ...state.scheduling, preferredDate: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
+                <select value={state.scheduling.preferredTime} onChange={(e) => update("scheduling", { ...state.scheduling, preferredTime: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]">
+                  <option value="">Preferred Time</option>
+                  <option>Morning (8am - 11am)</option>
+                  <option>Midday (11am - 2pm)</option>
+                  <option>Afternoon (2pm - 5pm)</option>
+                </select>
+                <input type="date" min={TODAY} value={state.scheduling.backupDate} onChange={(e) => update("scheduling", { ...state.scheduling, backupDate: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
+                <textarea placeholder="Special instructions / access notes" value={state.scheduling.notes} onChange={(e) => update("scheduling", { ...state.scheduling, notes: e.target.value })} className="sm:col-span-2 min-h-[120px] p-4 rounded-[12px] border border-[#d7e0eb]" />
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-4">
+              <h2 className="text-[#1F3A5F] text-[34px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>Review your booking</h2>
+              <div className="border border-[#dbe3ef] rounded-[14px] p-5 space-y-2 text-[15px]">
+                <p><b>Agent:</b> {state.agent.firstName} {state.agent.lastName} · {state.agent.email} · {state.agent.phone}</p>
+                <p><b>Brokerage:</b> {state.agent.brokerage || "-"}</p>
+                <p><b>Property:</b> {state.property.address} {state.property.unit ? `, Unit ${state.property.unit}` : ""}</p>
+                <p><b>Sqft Tier:</b> {SQFT_TIER_OPTIONS.find((x) => x.key === state.property.sqftTier)?.label ?? "-"}</p>
+                <p><b>Package:</b> {packageInfo.name}</p>
+                <p><b>Add-ons:</b> {selectedAddonLabels.length ? selectedAddonLabels.map((x) => x.label).join(", ") : "None"}</p>
+                <p><b>Shoot Date:</b> {state.scheduling.preferredDate || "-"} · {state.scheduling.preferredTime || "-"}</p>
+                <p className="pt-2 mt-2 border-t border-[#dbe3ef] text-[18px]"><b>Total:</b> {currency(estimatedTotal)}</p>
+              </div>
+              {error && <p className="text-[#c84848]">{error}</p>}
+            </div>
+          )}
+
+          <div className="mt-7 flex justify-between">
+            <button onClick={prev} disabled={step === 1 || submitting} className="h-11 px-5 rounded-full border border-[#ccd5e3] disabled:opacity-40">Back</button>
+            {step < 5 ? (
+              <button onClick={next} className="h-11 px-6 rounded-full bg-[#1F3A5F] text-white">Next</button>
+            ) : (
+              <button onClick={submit} disabled={submitting} className="h-11 px-6 rounded-full bg-[#1F3A5F] text-white disabled:opacity-50">
+                {submitting ? "Submitting..." : "Confirm Booking →"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#d1dbea] bg-white/96 backdrop-blur-sm">
+        <div className="max-w-[1120px] mx-auto px-4 sm:px-8 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="text-[13px] sm:text-[14px] text-[#1F3A5F]/80">
+            <span className="font-semibold">{packageInfo.name}</span>
+            <span className="mx-2">•</span>
+            <span>{SQFT_TIER_OPTIONS.find((x) => x.key === state.property.sqftTier)?.label ?? "Select sqft tier"}</span>
+            {selectedAddonLabels.length > 0 && (
+              <>
+                <span className="mx-2">•</span>
+                <span>{selectedAddonLabels.map((a) => a.label).join(", ")}</span>
+              </>
+            )}
+          </div>
+          <p className="text-[#1F3A5F] text-[16px] sm:text-[18px] font-semibold">Estimated Total: {currency(estimatedTotal)}</p>
+        </div>
+      </div>
+    </section>
+  );
+}

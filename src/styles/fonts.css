@@ -1,0 +1,9 @@
+@import url('https://fonts.cdnfonts.com/css/pp-neue-montreal');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap');
+
+:root {
+  --font-primary: 'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif;
+  --font-heading: 'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif;
+  --font-accent: 'Satoshi', 'PP Neue Montreal', 'Montserrat', sans-serif;
+}
