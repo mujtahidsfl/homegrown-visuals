@@ -1,27 +1,26 @@
 import { useRef, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { ArrowRight, Play, Pause, Menu, X, Search, MapPin, ExternalLink } from "lucide-react";
+import { motion } from "motion/react";
+import { ArrowRight, Play, Pause, Menu, X, MapPin, ExternalLink, ChevronDown } from "lucide-react";
 import { Link } from "react-router";
-import imgHero from "../../assets/cd69347ff2071545a8f5c40747f7c6eada393abe.png";
 import imgHgvLogo from "../../assets/cd8f347f8929f0c65b02f008df4e6d7431d70a30.png";
-import heroVideo from "../../assets/website-welcome-video.mp4";
 import { PACKAGE_DISPLAY, type PackageKey } from "../booking/config";
 import { BookingIntentModal } from "./booking/BookingIntentModal";
+import { SmartSearchBox } from "./SmartSearchBox";
 
 const GOOGLE_BUSINESS_URL =
   "https://www.google.com/maps/place/Homegrown+Visuals/@30.4979441,-87.1880423,17z/data=!3m1!4b1!4m6!3m5!1s0x8891b7fe9d8bd97f:0x2de33357bb1292e7!8m2!3d30.4979441!4d-87.1880423!16s%2Fg%2F11x03610mm?entry=ttu&g_ep=EgoyMDI2MDQwMS4wIKXMDSoASAFQAw%3D%3D";
+const HERO_VIDEO_URL =
+  "https://dl.dropboxusercontent.com/scl/fi/oqmkqotg1qqr3bj5kj4xv/Website-welcome-video.mp4?rlkey=wcgyl1ts639gd5imcsex95l69&st=kadfcb2e&raw=1";
 
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const links = [
     { label: "Home", href: "/" },
     { label: "Services", href: "/services" },
     { label: "Portfolio", href: "/portfolio" },
     { label: "About", href: "/about" },
-    { label: "FAQ", href: "/about#faq" },
+    { label: "FAQ", href: "/#faq" },
   ];
 
   return (
@@ -37,82 +36,30 @@ function Navbar() {
 
       <div className="hidden lg:flex items-center gap-8 xl:gap-10">
         {links.map((link) => (
-          <a
+          <Link
             key={link.label}
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
+            to={link.href}
             className="text-[#F4F6F7] text-[15px] xl:text-[16px] hover:opacity-70 transition-opacity"
             style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400 }}
           >
             {link.label}
-          </a>
+          </Link>
         ))}
       </div>
 
       <div className="hidden lg:flex items-center gap-3">
-        <div className="relative flex items-center">
-          <AnimatePresence>
-            {searchOpen && (
-              <motion.div
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 280, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="overflow-hidden mr-1"
-              >
-                <input
-                  autoFocus
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search the site..."
-                  className="w-full h-[44px] rounded-full bg-white px-5 text-[#1F3A5F] text-[14px] outline-none placeholder:text-[#1F3A5F]/40"
-                  style={{ fontFamily: "'Satoshi', sans-serif" }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setSearchOpen(false);
-                      setSearchQuery("");
-                    }
-                  }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <button
-            onClick={() => {
-              setSearchOpen(!searchOpen);
-              if (searchOpen) setSearchQuery("");
-            }}
-            className="w-[44px] h-[44px] rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
-          >
-            {searchOpen ? (
-              <X size={18} className="text-[#1F3A5F]" />
-            ) : (
-              <Search size={18} className="text-[#1F3A5F]" />
-            )}
-          </button>
-        </div>
-        <a
-          href="/services"
-          target="_blank"
-          rel="noopener noreferrer"
+        <SmartSearchBox overlay />
+        <Link
+          to="/services"
           className="h-[44px] px-6 rounded-full border border-white/45 text-white text-[15px] hover:bg-white/10 transition-colors flex items-center"
           style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
         >
           Book With Us
-        </a>
-      </div>
-
-      <div className="hidden sm:block lg:hidden relative">
-        <div className="absolute inset-0 bg-white/40 rounded-[999px] translate-y-[3px] blur-[2px]" />
-        <button className="relative bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-4 sm:px-6 py-2.5 sm:py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-all">
-          Book a Shoot
-        </button>
+        </Link>
       </div>
 
       <button
-        className="lg:hidden p-2"
+        className="lg:hidden p-2 text-[#111111] sm:text-white"
         onClick={() => setMobileOpen(!mobileOpen)}
         aria-label="Toggle menu"
       >
@@ -122,20 +69,21 @@ function Navbar() {
       {mobileOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[16px] shadow-xl p-6 flex flex-col gap-4 lg:hidden">
           {links.map((link) => (
-            <a
+            <Link
               key={link.label}
-              href={link.href}
-              target="_blank"
-              rel="noopener noreferrer"
+              to={link.href}
               className="text-[#1F3A5F] text-[18px] font-['Satoshi',sans-serif] hover:opacity-70 transition-opacity"
               onClick={() => setMobileOpen(false)}
             >
               {link.label}
-            </a>
+            </Link>
           ))}
-          <button className="sm:hidden bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-6 py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-colors w-full mt-2">
+          <a
+            href="/services"
+            className="bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-6 py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-colors w-full mt-2 text-center"
+          >
             Book a Shoot
-          </button>
+          </a>
         </div>
       )}
     </nav>
@@ -187,7 +135,7 @@ function PackagePickerModal({
         >
           Select what you want to book
         </h3>
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {HERO_PACKAGE_OPTIONS.map((pkg) => (
             <button
               key={pkg.key}
@@ -225,10 +173,10 @@ function HeroCTAs({
   isVideoPlaying: boolean;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-6 sm:mt-8">
-      <button type="button" onClick={onBookClick} className="relative rounded-[999px] bg-white p-[3px]">
-        <div className="bg-[#597eb1] rounded-[999px] px-5 sm:px-8 py-3 sm:py-4 flex items-center gap-3 hover:bg-[#4a6d9e] transition-colors">
-          <span className="text-white text-[15px] sm:text-[18px] font-medium tracking-wide">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-6 sm:mt-8 w-full">
+      <button type="button" onClick={onBookClick} className="relative rounded-[999px] bg-white p-[3px] w-full sm:w-auto">
+        <div className="bg-[#597eb1] rounded-[999px] px-5 sm:px-8 py-3 sm:py-4 flex items-center justify-center gap-3 hover:bg-[#4a6d9e] transition-colors">
+          <span className="text-white text-[14px] sm:text-[18px] font-medium tracking-wide">
             BOOK YOUR SHOOT
           </span>
           <ArrowRight className="text-white" size={20} />
@@ -307,20 +255,22 @@ export function HeroSection() {
 
   return (
     <div className="bg-[#FFFFFF] px-1 sm:px-1 pt-1 sm:pt-1">
-      <section id="services" className="relative w-full min-h-[85vh] overflow-hidden rounded-[20px] sm:rounded-[24px]">
+      <section
+        id="services"
+        className="relative w-full min-h-[calc(100dvh+27px)] sm:min-h-[calc(100svh-25px)] md:min-h-[860px] lg:min-h-[calc(100svh-25px)] overflow-hidden rounded-[20px] sm:rounded-[24px]"
+      >
         <video
           ref={videoRef}
           autoPlay
           loop
           muted
           playsInline
-          poster={imgHero}
           onPlay={() => setIsVideoPlaying(true)}
           onPause={() => setIsVideoPlaying(false)}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover object-[62%_center] sm:object-center"
           style={{ filter: "contrast(1.1) saturate(0.85) brightness(0.95)" }}
         >
-          <source src={heroVideo} type="video/mp4" />
+          <source src={HERO_VIDEO_URL} type="video/mp4" />
         </video>
         <div className="absolute inset-0 bg-gradient-to-r from-[#0d1b2e]/85 via-[#1F3A5F]/50 to-[#1F3A5F]/15" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0d1b2e]/60 via-transparent to-[#0d1b2e]/20" />
@@ -330,33 +280,54 @@ export function HeroSection() {
 
         <Navbar />
 
-        <div className="relative z-10 flex flex-col justify-center min-h-[85vh] px-4 sm:px-8 pt-[130px] sm:pt-[120px] lg:pt-[130px] pb-8 sm:pb-12 max-w-[1394px] mx-auto rounded-[15px]">
+        <div className="relative z-10 flex flex-col justify-end sm:justify-center min-h-[calc(100dvh+27px)] sm:min-h-[calc(100svh-25px)] md:min-h-[860px] lg:min-h-[calc(100svh-25px)] px-4 sm:px-8 md:px-10 lg:px-8 pt-[104px] sm:pt-[120px] md:pt-[138px] lg:pt-[130px] pb-14 sm:pb-12 md:pb-16 max-w-[1394px] mx-auto rounded-[15px]">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 lg:gap-8">
-            <div className="flex flex-col max-w-full lg:max-w-[60%] mt-[38px] sm:mt-[18px]">
+            <div className="flex flex-col max-w-full md:max-w-[72%] lg:max-w-[60%] mt-[24px] sm:mt-[18px] translate-y-[10px] sm:translate-y-0">
+              <div className="mb-4 sm:hidden">
+                <HeroLocationBadge />
+              </div>
+              <div className="hidden sm:inline-flex mb-4 lg:mb-5">
+                <HeroLocationBadge />
+              </div>
               <h1
-                className="text-[#F4F6F7] max-w-[700px] text-[32px] sm:text-[44px] md:text-[52px] lg:text-[60px]"
+                className="text-[#F4F6F7] max-w-[350px] sm:max-w-[700px] md:max-w-[640px] text-[42px] sm:text-[44px] md:text-[56px] lg:text-[60px]"
                 style={{ fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif", fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.025em" }}
               >
-                You deserve to be remembered
+                <span className="block whitespace-nowrap sm:hidden">You deserve to</span>
+                <span className="block whitespace-nowrap sm:hidden">be remembered</span>
+                <span className="hidden sm:inline">You deserve to be</span>
+                <span className="hidden sm:inline sm:ml-2">remembered</span>
               </h1>
               <p
-                className="text-[#F4F6F7] text-[15px] sm:text-[16px] md:text-[18px] max-w-[572px] mt-4 sm:mt-4"
+                className="text-[#F4F6F7] text-[15px] sm:text-[16px] md:text-[18px] max-w-[352px] sm:max-w-[572px] mt-3 sm:mt-4"
                 style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400, lineHeight: 1.75 }}
               >
                 Not just photos and videos. We create media and marketing strategies that generate leads and grow your brand.
               </p>
 
               <HeroCTAs
-                onBookClick={() => setShowPackagePicker(true)}
+                onBookClick={() => {
+                  window.location.href = "/services";
+                }}
                 onToggleVideo={toggleHeroVideo}
                 isVideoPlaying={isVideoPlaying}
               />
 
-              <div className="w-full max-w-[817px] h-[1px] bg-white mt-10 sm:mt-10 mb-7 sm:mb-8" />
-
-              <HeroLocationBadge />
             </div>
           </div>
+
+          <motion.div
+            initial={{ opacity: 0.45, y: 0 }}
+            animate={{ opacity: [0.35, 0.8, 0.35], y: [0, 8, 0] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute bottom-4 sm:bottom-7 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none"
+            aria-hidden="true"
+          >
+            <ChevronDown
+              strokeWidth={2.4}
+              className="text-white/90 h-[34px] w-[34px] sm:h-[48px] sm:w-[48px]"
+            />
+          </motion.div>
         </div>
       </section>
 

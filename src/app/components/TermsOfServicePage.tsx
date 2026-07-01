@@ -19,11 +19,13 @@ export function TermsOfServicePage() {
           <p><strong>Effective Date:</strong> April 3, 2026</p>
 
           <div>
-            <p className="text-[#1F3A5F] mb-2" style={{ fontWeight: 700 }}>Scheduling &amp; Cancellation Policy</p>
+            <p className="text-[#1F3A5F] mb-2" style={{ fontWeight: 700 }}>Scheduling & Cancellation Policy</p>
             <ul className="list-disc pl-5 space-y-2">
-              <li><strong>Scheduling Requests:</strong> Preferred booking times submitted through our form are requests only. Our team will reach out shortly to confirm the exact shoot time.</li>
-              <li><strong>Rescheduling:</strong> If weather, property access, or listing readiness affects the appointment, we will coordinate the next available time with you directly.</li>
-              <li><strong>Cancellation:</strong> If you need to cancel or reschedule, please contact Homegrown Visuals as early as possible so we can update your appointment and availability.</li>
+              <li><strong>If you reschedule or cancel within 24 hours or if we arrive and the home or you are not prepared for the shoot then we will charge a $75 cancellation/reschedule fee</strong></li>
+              <li>For any inclement weather related reschedules/cancellations we don't charge a fee and will find the closest date/time to reschedule with you</li>
+              <li>If there is an emergency out of your control we won’t charge you a fee</li>
+              <li>If you reschedule/cancel before 24 hours of your appointment we won’t charge you a fee</li>
+              <li>Just cloudy or overcast skies are not typically cause for rescheduling, as we offer free sky replacements with every shoot. In fact, overcast skies can often create a better shooting environment by diffusing light naturally, what we call Nature’s Softbox, which helps eliminate harsh shadows and creates a more balanced, professional look.</li>
             </ul>
           </div>
 

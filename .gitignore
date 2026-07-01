@@ -1,4 +1,6 @@
-node_modules/
-dist/
-.DS_Store
-*.mp4
+.vercel
+.env.local
+.env.*.local
+node_modules
+dist
+src/assets/portfolio/luxury-reels/luxury-reel-04.mov.disabled

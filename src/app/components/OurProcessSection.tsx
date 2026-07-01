@@ -6,21 +6,21 @@ const steps = [
     step: "01",
     title: "Book Your Shoot",
     description:
-      "Pick a date, choose your services, and we handle the rest. Our online booking takes under 2 minutes — no phone calls needed.",
+      "Pick a date, choose your services, and we handle the rest. Our online booking takes under 2 minutes, no phone calls needed.",
   },
   {
     icon: Camera,
     step: "02",
     title: "We Show Up & Shoot",
     description:
-      "Our team arrives on time, fully equipped. We capture everything — photos, video, drone, 3D — in a single visit so you're never waiting around.",
+      "Our team arrives on time, fully equipped. We capture everything, photos, video, drone, 3D, in a single visit so you're never waiting around.",
   },
   {
     icon: FolderDown,
     step: "03",
     title: "Get Your Media Fast",
     description:
-      "Edited, polished, and delivered to your inbox within 24–48 hours. Download, share, and start marketing your listing immediately.",
+      "Edited and polished photos delivered to your inbox next day. Plus, our professional video content gets delivered within days, not weeks. Your listings are time-sensitive, and we understand the importance of marketing while buyer interest is hot.",
   },
 ];
 
@@ -46,7 +46,7 @@ export function OurProcessSection() {
             className="text-[#3D5A80] text-[16px] sm:text-[20px] md:text-[24px] max-w-[837px] mx-auto"
             style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400, lineHeight: 1.5 }}
           >
-            We built our process around one thing — respecting your time. No back-and-forth headaches, no confusing invoices, no wondering where your photos are. Here's how it works.
+            We built our process around one thing, respecting your time. No back-and-forth headaches, no confusing invoices, no wondering where your photos are. Here's how it works.
           </p>
         </div>
 

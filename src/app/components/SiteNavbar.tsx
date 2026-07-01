@@ -1,25 +1,25 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Menu, X, Search } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Link } from "react-router";
 import imgHgvLogo from "../../assets/cd8f347f8929f0c65b02f008df4e6d7431d70a30.png";
+import { SmartSearchBox } from "./SmartSearchBox";
 
 type SiteNavbarProps = {
   overlay?: boolean;
   variant?: "warm" | "cool";
+  flat?: boolean;
+  navBgClass?: string;
 };
 
-export function SiteNavbar({ overlay = false, variant = "warm" }: SiteNavbarProps) {
+export function SiteNavbar({ overlay = false, variant = "warm", flat = false, navBgClass }: SiteNavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const links = [
     { label: "Home", to: "/" },
     { label: "Services", to: "/services" },
     { label: "Portfolio", to: "/portfolio" },
     { label: "About", to: "/about" },
-    { label: "FAQ", to: "/about#faq" },
+    { label: "FAQ", to: "/#faq" },
   ];
 
   const solidContainerClass =
@@ -27,14 +27,18 @@ export function SiteNavbar({ overlay = false, variant = "warm" }: SiteNavbarProp
       ? "bg-[#f7fbff] border border-[#d6deea] shadow-[0_8px_20px_rgba(31,58,95,0.08)]"
       : "bg-[#ffffff] border border-[#e3dccf] shadow-[0_8px_20px_rgba(31,58,95,0.08)]";
 
-  const iconButtonClass =
-    variant === "cool"
-      ? "w-[44px] h-[44px] rounded-full bg-white flex items-center justify-center hover:bg-[#eef4fb] transition-colors"
-      : "w-[44px] h-[44px] rounded-full bg-[#ffffff] flex items-center justify-center hover:bg-[#f7f1e5] transition-colors";
+  const flatContainerClass = navBgClass ?? (variant === "cool" ? "bg-[#f7fbff]" : "bg-[#ffffff]");
+  const flatContainerSurfaceClass = `${flatContainerClass} border border-transparent shadow-none`;
+
+  const navPositionClass = overlay
+    ? "absolute top-2 sm:top-3"
+    : flat
+      ? "relative mt-0 mb-4 sm:mb-5"
+      : "relative mt-2 sm:mt-3 mb-5 sm:mb-7";
 
   return (
     <nav
-      className={`${overlay ? "absolute top-2 sm:top-3" : "relative mt-2 sm:mt-3 mb-5 sm:mb-7"} left-1/2 -translate-x-1/2 w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] max-w-[1394px] rounded-[16px] sm:rounded-[20px] h-[60px] sm:h-[72px] lg:h-[87px] flex items-center justify-between px-4 sm:px-6 z-40 ${overlay ? "bg-white sm:bg-transparent" : solidContainerClass}`}
+      className={`${navPositionClass} left-1/2 -translate-x-1/2 w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] max-w-[1394px] rounded-[16px] sm:rounded-[20px] h-[60px] sm:h-[72px] lg:h-[87px] flex items-center justify-between px-4 sm:px-6 z-40 ${overlay ? "bg-white sm:bg-transparent" : flat ? flatContainerSurfaceClass : solidContainerClass}`}
     >
       <Link to="/" className="h-full flex items-center py-1">
         <img
@@ -47,75 +51,27 @@ export function SiteNavbar({ overlay = false, variant = "warm" }: SiteNavbarProp
 
       <div className="hidden lg:flex items-center gap-8 xl:gap-10">
         {links.map((link) => (
-          <a
+          <Link
             key={link.label}
-            href={link.to}
-            target="_blank"
-            rel="noopener noreferrer"
+            to={link.to}
             className={`${overlay ? "text-[#F4F6F7]" : "text-[#1F3A5F]"} text-[15px] xl:text-[16px] hover:opacity-70 transition-opacity`}
             style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400 }}
           >
             {link.label}
-          </a>
+          </Link>
         ))}
       </div>
 
       <div className="hidden lg:flex items-center gap-3">
-        <div className="relative flex items-center">
-          <AnimatePresence>
-            {searchOpen && (
-              <motion.div
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 280, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="overflow-hidden mr-1"
-              >
-                <input
-                  autoFocus
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search the site..."
-                  className="w-full h-[44px] rounded-full bg-white px-5 text-[#1F3A5F] text-[14px] outline-none placeholder:text-[#1F3A5F]/40"
-                  style={{ fontFamily: "'Satoshi', sans-serif" }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setSearchOpen(false);
-                      setSearchQuery("");
-                    }
-                  }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <button
-            onClick={() => {
-              setSearchOpen(!searchOpen);
-              if (searchOpen) setSearchQuery("");
-            }}
-            className={iconButtonClass}
-          >
-            {searchOpen ? <X size={18} className="text-[#1F3A5F]" /> : <Search size={18} className="text-[#1F3A5F]" />}
-          </button>
-        </div>
-        <a
-          href="/services"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`${overlay ? "border-white/45 text-white hover:bg-white/10" : "border-[#1F3A5F]/25 text-[#1F3A5F] hover:bg-[#1F3A5F]/5"} h-[44px] px-6 rounded-full border text-[15px] transition-colors flex items-center`}
+        <SmartSearchBox overlay={overlay} flat={flat} />
+        <Link
+          to="/services"
+          className={`${overlay ? "border-white/45 text-white hover:bg-white/10" : flat ? "bg-[#1F3A5F]/8 text-[#1F3A5F] hover:bg-[#1F3A5F]/14 border-transparent" : "border-[#1F3A5F]/25 text-[#1F3A5F] hover:bg-[#1F3A5F]/5"} h-[44px] px-6 rounded-full border text-[15px] transition-colors flex items-center`}
           style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
         >
           Book With Us
-        </a>
-
-      </div>
-
-      <div className="hidden sm:block lg:hidden relative">
-        <div className="absolute inset-0 bg-white/40 rounded-[999px] translate-y-[3px] blur-[2px]" />
-        <Link to="/services" className="relative inline-flex bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-4 sm:px-6 py-2.5 sm:py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-all">
-          Book a Shoot
         </Link>
+
       </div>
 
       <button
@@ -129,18 +85,16 @@ export function SiteNavbar({ overlay = false, variant = "warm" }: SiteNavbarProp
       {mobileOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[16px] shadow-xl p-6 flex flex-col gap-4 lg:hidden">
           {links.map((link) => (
-            <a
+            <Link
               key={link.label}
-              href={link.to}
-              target="_blank"
-              rel="noopener noreferrer"
+              to={link.to}
               className="text-[#1F3A5F] text-[18px] font-['Satoshi',sans-serif] hover:opacity-70 transition-opacity"
               onClick={() => setMobileOpen(false)}
             >
               {link.label}
-            </a>
+            </Link>
           ))}
-          <Link to="/services" className="sm:hidden bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-6 py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-colors w-full mt-2 text-center">
+          <Link to="/services" className="bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-6 py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-colors w-full mt-2 text-center">
             Book a Shoot
           </Link>
         </div>

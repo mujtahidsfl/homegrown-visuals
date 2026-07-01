@@ -3,7 +3,7 @@ import { TrustBadges } from "./TrustBadges";
 import { ClientTestimonialsSection } from "./ClientTestimonialsSection";
 import { AboutStorySection } from "./AboutStorySection";
 import { OurProcessSection } from "./OurProcessSection";
-import { WhyHGVSection } from "./WhyHGVSection";
+import { FAQSection } from "./FAQSection";
 import { FooterSection } from "./FooterSection";
 
 export function HomePage() {
@@ -14,7 +14,7 @@ export function HomePage() {
       <ClientTestimonialsSection />
       <AboutStorySection />
       <OurProcessSection />
-      <WhyHGVSection />
+      <FAQSection />
       <FooterSection />
     </div>
   );
