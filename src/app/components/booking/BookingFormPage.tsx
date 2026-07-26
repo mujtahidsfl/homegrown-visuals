@@ -102,6 +102,20 @@ function addonPrice(addon: Addon, tier: SqftTierKey | "") {
   return addon.sqftPrices[tier] ?? 0;
 }
 
+const buildLineItem = (
+  id: string,
+  name: string,
+  category: string,
+  amount: number,
+) => ({
+  id,
+  name,
+  category,
+  quantity: 1,
+  unit_amount: amount,
+  amount,
+});
+
 export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const navigate = useNavigate();
   const draftRestoredRef = useRef(false);
@@ -319,6 +333,21 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const submit = async () => {
     const webhookUrl = PACKAGE_WEBHOOK_URLS[packageKey];
     const addonLabels = selectedAddonLabels.map((addon) => addon.label);
+    const lineItems = [
+      ...(state.property.sqftTier
+        ? [
+            buildLineItem(
+              packageKey,
+              packageInfo.name,
+              "Package",
+              BASE_PRICES[packageKey][state.property.sqftTier],
+            ),
+          ]
+        : []),
+      ...selectedAddonLabels
+        .map((addon) => buildLineItem(addon.id, addon.label, addon.category, addonPrice(addon, state.property.sqftTier)))
+        .filter((item) => item.amount > 0),
+    ];
     const buildPayload = (retryMode?: string) => {
       const submittedAt = new Date().toISOString();
       const fullName = `${state.agent.firstName} ${state.agent.lastName}`.trim();
@@ -332,6 +361,8 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         property_address: state.property.address,
         sqft_tier: state.property.sqftTier,
         selections: addonLabels,
+        line_items: lineItems,
+        invoice_line_items: lineItems,
         schedule: {
           preferredDate: state.scheduling.preferredDate,
           preferredTime: state.scheduling.preferredTime,

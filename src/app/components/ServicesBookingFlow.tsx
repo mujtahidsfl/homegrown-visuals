@@ -227,8 +227,25 @@ const REAL_ESTATE_LANDMARK_OPTIONS = [
   { id: "re_landmark_2", label: "2 Photos", price: 55 },
 ];
 
+const REAL_ESTATE_DRONE_CLIP_OPTIONS = [
+  { id: "re_drone_clip_1", label: "1 Drone Clip", price: 25 },
+  { id: "re_drone_clip_2", label: "2 Drone Clips", price: 50 },
+  { id: "re_drone_clip_3", label: "3 Drone Clips", price: 75 },
+  { id: "re_drone_clip_4", label: "4 Drone Clips", price: 100 },
+  { id: "re_drone_clip_5", label: "5 Drone Clips", price: 125 },
+];
+
 const REAL_ESTATE_TWILIGHT_SESSION_ID = "re_twilight_session";
 const REAL_ESTATE_TWILIGHT_SESSION_PRICE = 289;
+
+type InvoiceLineItem = {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit_amount: number;
+  amount: number;
+};
 
 const TIER_DURATION_MINUTES: Record<
   string,
@@ -269,6 +286,11 @@ const FLAT_DURATION_MINUTES: Record<string, number> = {
   re_stage_5: 0,
   re_landmark_1: 0,
   re_landmark_2: 0,
+  re_drone_clip_1: 0,
+  re_drone_clip_2: 0,
+  re_drone_clip_3: 0,
+  re_drone_clip_4: 0,
+  re_drone_clip_5: 0,
   re_amenity_photos: 0,
   [REAL_ESTATE_TWILIGHT_SESSION_ID]: 30,
   land_package: 75,
@@ -341,6 +363,7 @@ const getRealEstatePayloadSelections = ({
   twilightOption,
   stagingOption,
   landmarkOption,
+  droneClipOption,
   amenityPhotos,
   luxuryReelOption,
   socialReelOption,
@@ -350,6 +373,7 @@ const getRealEstatePayloadSelections = ({
   twilightOption: string;
   stagingOption: string;
   landmarkOption: string;
+  droneClipOption: string;
   amenityPhotos: boolean;
   luxuryReelOption: string;
   socialReelOption: string;
@@ -368,6 +392,9 @@ const getRealEstatePayloadSelections = ({
   landmark_option: landmarkOption
     ? formatSelectionLabel("Landmarks", getOptionLabel(REAL_ESTATE_LANDMARK_OPTIONS, landmarkOption))
     : "",
+  drone_clip_option: droneClipOption
+    ? formatSelectionLabel("Drone Clips", getOptionLabel(REAL_ESTATE_DRONE_CLIP_OPTIONS, droneClipOption))
+    : "",
   community_amenity_photos: amenityPhotos,
   luxury_reel_option: luxuryReelOption
     ? formatSelectionLabel("Luxury Reel 45-60sec", getOptionLabel(REAL_ESTATE_LUXURY_REEL_OPTIONS, luxuryReelOption))
@@ -375,6 +402,99 @@ const getRealEstatePayloadSelections = ({
   social_reel_option: socialReelOption
     ? formatSelectionLabel("Social Media Reel", getOptionLabel(REAL_ESTATE_SOCIAL_REEL_OPTIONS, socialReelOption))
     : "",
+});
+
+const getRealEstateLineItems = ({
+  realEstatePackage,
+  realEstateSqftTier,
+  realEstateSelections,
+  detailOption,
+  twilightOption,
+  stagingOption,
+  landmarkOption,
+  droneClipOption,
+  amenityPhotos,
+  luxuryReelOption,
+  socialReelOption,
+}: {
+  realEstatePackage: PackageKey | null;
+  realEstateSqftTier: SqftTierKey | "";
+  realEstateSelections: string[];
+  detailOption: string;
+  twilightOption: string;
+  stagingOption: string;
+  landmarkOption: string;
+  droneClipOption: string;
+  amenityPhotos: boolean;
+  luxuryReelOption: string;
+  socialReelOption: string;
+}) => {
+  const lineItems: InvoiceLineItem[] = [];
+
+  if (realEstatePackage && realEstateSqftTier) {
+    lineItems.push(
+      buildLineItem(
+        realEstatePackage,
+        PACKAGE_DISPLAY[realEstatePackage].name,
+        "Package",
+        BASE_PRICES[realEstatePackage][realEstateSqftTier],
+      ),
+    );
+  }
+
+  realEstateSelections.forEach((id) => {
+    const selection = getRealEstateSelection(id);
+    if (!selection) return;
+    const amount =
+      selection.pricingType === "flat"
+        ? selection.price
+        : realEstateSqftTier
+          ? selection.prices[realEstateSqftTier]
+          : 0;
+    if (!amount) return;
+    lineItems.push(buildLineItem(id, selection.label, "A La Carte", amount));
+  });
+
+  const detail = REAL_ESTATE_DETAIL_OPTIONS.find((option) => option.id === detailOption);
+  if (detail) lineItems.push(buildLineItem(detail.id, formatSelectionLabel("Detail Photos", detail.label), "Add-Ons", detail.price));
+
+  const twilight = REAL_ESTATE_TWILIGHT_OPTIONS.find((option) => option.id === twilightOption);
+  if (twilight) lineItems.push(buildLineItem(twilight.id, formatSelectionLabel("Virtual Twilight Photos", twilight.label), "Add-Ons", twilight.price));
+
+  const staging = REAL_ESTATE_VIRTUAL_STAGING_OPTIONS.find((option) => option.id === stagingOption);
+  if (staging) lineItems.push(buildLineItem(staging.id, formatSelectionLabel("Virtual Staging", staging.label), "Add-Ons", staging.price));
+
+  const landmark = REAL_ESTATE_LANDMARK_OPTIONS.find((option) => option.id === landmarkOption);
+  if (landmark) lineItems.push(buildLineItem(landmark.id, formatSelectionLabel("Landmarks", landmark.label), "Add-Ons", landmark.price));
+
+  const droneClip = REAL_ESTATE_DRONE_CLIP_OPTIONS.find((option) => option.id === droneClipOption);
+  if (droneClip) lineItems.push(buildLineItem(droneClip.id, formatSelectionLabel("Drone Clips", droneClip.label), "Add-Ons", droneClip.price));
+
+  if (amenityPhotos) {
+    lineItems.push(buildLineItem("re_amenity_photos", "Community Amenity Photos", "Add-Ons", REAL_ESTATE_AMENITY_PRICE));
+  }
+
+  const luxury = REAL_ESTATE_LUXURY_REEL_OPTIONS.find((option) => option.id === luxuryReelOption);
+  if (luxury) lineItems.push(buildLineItem(luxury.id, formatSelectionLabel("Luxury Reel 45-60sec", luxury.label), "A La Carte", luxury.price));
+
+  const social = REAL_ESTATE_SOCIAL_REEL_OPTIONS.find((option) => option.id === socialReelOption);
+  if (social) lineItems.push(buildLineItem(social.id, formatSelectionLabel("Social Media Reel", social.label), "A La Carte", social.price));
+
+  return lineItems;
+};
+
+const buildLineItem = (
+  id: string,
+  name: string,
+  category: string,
+  amount: number,
+): InvoiceLineItem => ({
+  id,
+  name,
+  category,
+  quantity: 1,
+  unit_amount: amount,
+  amount,
 });
 
 const VACANT_LAND_ITEMS = [
@@ -617,6 +737,7 @@ export function ServicesBookingFlow() {
   const [twilightOption, setTwilightOption] = useState<string>("");
   const [stagingOption, setStagingOption] = useState<string>("");
   const [landmarkOption, setLandmarkOption] = useState<string>("");
+  const [droneClipOption, setDroneClipOption] = useState<string>("");
   const [amenityPhotos, setAmenityPhotos] = useState(false);
   const [luxuryReelOption, setLuxuryReelOption] = useState<string>("");
   const [socialReelOption, setSocialReelOption] = useState<string>("");
@@ -780,11 +901,13 @@ export function ServicesBookingFlow() {
     if (twilightOption) ids.push(twilightOption);
     if (stagingOption) ids.push(stagingOption);
     if (landmarkOption) ids.push(landmarkOption);
+    if (droneClipOption) ids.push(droneClipOption);
     if (amenityPhotos) ids.push("re_amenity_photos");
     return ids;
   }, [
     amenityPhotos,
     detailOption,
+    droneClipOption,
     landmarkOption,
     luxuryReelOption,
     realEstatePackage,
@@ -804,6 +927,7 @@ export function ServicesBookingFlow() {
       twilightOption ? getServiceDurationMinutes(twilightOption, realEstateSqftTier) : 0,
       stagingOption ? getServiceDurationMinutes(stagingOption, realEstateSqftTier) : 0,
       landmarkOption ? getServiceDurationMinutes(landmarkOption, realEstateSqftTier) : 0,
+      droneClipOption ? getServiceDurationMinutes(droneClipOption, realEstateSqftTier) : 0,
       amenityPhotos ? getServiceDurationMinutes("re_amenity_photos", realEstateSqftTier) : 0,
     ];
 
@@ -811,6 +935,7 @@ export function ServicesBookingFlow() {
   }, [
     amenityPhotos,
     detailOption,
+    droneClipOption,
     landmarkOption,
     luxuryReelOption,
     realEstatePackage,
@@ -947,9 +1072,11 @@ export function ServicesBookingFlow() {
     if (staging) total += staging.price;
     const landmark = REAL_ESTATE_LANDMARK_OPTIONS.find((option) => option.id === landmarkOption);
     if (landmark) total += landmark.price;
+    const droneClip = REAL_ESTATE_DRONE_CLIP_OPTIONS.find((option) => option.id === droneClipOption);
+    if (droneClip) total += droneClip.price;
     if (amenityPhotos) total += REAL_ESTATE_AMENITY_PRICE;
     return total;
-  }, [amenityPhotos, detailOption, landmarkOption, stagingOption, twilightOption]);
+  }, [amenityPhotos, detailOption, droneClipOption, landmarkOption, stagingOption, twilightOption]);
 
   const realEstateTotal = realEstateBase + realEstateAlaCarteTotal + realEstateEditingTotal;
 
@@ -1037,6 +1164,20 @@ export function ServicesBookingFlow() {
           twilightOption,
           stagingOption,
           landmarkOption,
+          droneClipOption,
+          amenityPhotos,
+          luxuryReelOption,
+          socialReelOption,
+        }),
+        line_items: getRealEstateLineItems({
+          realEstatePackage,
+          realEstateSqftTier,
+          realEstateSelections,
+          detailOption,
+          twilightOption,
+          stagingOption,
+          landmarkOption,
+          droneClipOption,
           amenityPhotos,
           luxuryReelOption,
           socialReelOption,
@@ -1134,6 +1275,7 @@ export function ServicesBookingFlow() {
     if (typeof draft.twilightOption === "string") setTwilightOption(draft.twilightOption);
     if (typeof draft.stagingOption === "string") setStagingOption(draft.stagingOption);
     if (typeof draft.landmarkOption === "string") setLandmarkOption(draft.landmarkOption);
+    if (typeof draft.droneClipOption === "string") setDroneClipOption(draft.droneClipOption);
     if (typeof draft.amenityPhotos === "boolean") setAmenityPhotos(draft.amenityPhotos);
     if (typeof draft.luxuryReelOption === "string") setLuxuryReelOption(draft.luxuryReelOption);
     if (typeof draft.socialReelOption === "string") setSocialReelOption(draft.socialReelOption);
@@ -1200,6 +1342,7 @@ export function ServicesBookingFlow() {
         twilightOption,
         stagingOption,
         landmarkOption,
+        droneClipOption,
         amenityPhotos,
         luxuryReelOption,
         socialReelOption,
@@ -1226,6 +1369,7 @@ export function ServicesBookingFlow() {
     additionalInfo,
     amenityPhotos,
     detailOption,
+    droneClipOption,
     landmarkOption,
     landAccess,
     landContact,
@@ -1292,6 +1436,7 @@ export function ServicesBookingFlow() {
     additionalInfo,
     amenityPhotos,
     detailOption,
+    droneClipOption,
     isOversize,
     landmarkOption,
     landAccess,
@@ -1344,6 +1489,7 @@ export function ServicesBookingFlow() {
     setTwilightOption("");
     setStagingOption("");
     setLandmarkOption("");
+    setDroneClipOption("");
     setAmenityPhotos(false);
     setLuxuryReelOption("");
     setSocialReelOption("");
@@ -1470,6 +1616,20 @@ export function ServicesBookingFlow() {
       twilightOption,
       stagingOption,
       landmarkOption,
+      droneClipOption,
+      amenityPhotos,
+      luxuryReelOption,
+      socialReelOption,
+    });
+    const lineItems = getRealEstateLineItems({
+      realEstatePackage,
+      realEstateSqftTier,
+      realEstateSelections,
+      detailOption,
+      twilightOption,
+      stagingOption,
+      landmarkOption,
+      droneClipOption,
       amenityPhotos,
       luxuryReelOption,
       socialReelOption,
@@ -1483,6 +1643,8 @@ export function ServicesBookingFlow() {
       sqft_tier: realEstateSqftTier || null,
       property_address: realEstateProperty.address,
       selections,
+      line_items: lineItems,
+      invoice_line_items: lineItems,
       video_questions: videoQuestions,
       schedule: realEstateSchedule,
       access: {
@@ -2582,6 +2744,17 @@ export function ServicesBookingFlow() {
                     </span>
                     <span className="font-semibold text-[#1F2D5A]">{currency(REAL_ESTATE_AMENITY_PRICE)}</span>
                   </label>
+                  <div className={`px-4 py-3 ${CARD_BASE}`}>
+                    <p className="text-[#1F2D5A] text-[14px] font-semibold">Drone Clips</p>
+                    <select value={droneClipOption} onChange={(e) => setDroneClipOption(e.target.value)} className="mt-2 w-full h-10 px-3 rounded-[10px] border border-[#dbe7ef]">
+                      <option value="">Select quantity</option>
+                      {REAL_ESTATE_DRONE_CLIP_OPTIONS.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label} · {currency(option.price)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </SectionShell>
             )}
