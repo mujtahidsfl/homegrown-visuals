@@ -382,6 +382,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         selections: addonLabels,
         line_items: lineItems,
         invoice_line_items: lineItems,
+        invoice_line_items_json: JSON.stringify(lineItems),
         invoice_line_items_text: getInvoiceLineItemsText(lineItems),
         invoice_summary: getInvoiceSummary(lineItems, estimatedTotal, state.property.address),
         invoice_total_label: currency(estimatedTotal),

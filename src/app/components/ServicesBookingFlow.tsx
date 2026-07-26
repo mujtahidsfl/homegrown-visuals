@@ -1664,6 +1664,7 @@ export function ServicesBookingFlow() {
       selections,
       line_items: lineItems,
       invoice_line_items: lineItems,
+      invoice_line_items_json: JSON.stringify(lineItems),
       invoice_line_items_text: getInvoiceLineItemsText(lineItems),
       invoice_summary: getInvoiceSummary(lineItems, realEstateTotal, realEstateProperty.address),
       invoice_total_label: currency(realEstateTotal),
