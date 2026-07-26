@@ -503,6 +503,16 @@ const formatInvoiceLineItem = (item: InvoiceLineItem) =>
 const getInvoiceLineItemsText = (lineItems: InvoiceLineItem[]) =>
   lineItems.map(formatInvoiceLineItem).join("\n");
 
+const getStripeInvoiceLinesBody = (lineItems: InvoiceLineItem[]) => {
+  const params = new URLSearchParams();
+  lineItems.forEach((item, index) => {
+    params.append(`lines[${index}][amount]`, String(Math.round(item.amount * 100)));
+    params.append(`lines[${index}][currency]`, "usd");
+    params.append(`lines[${index}][description]`, item.name);
+  });
+  return params.toString();
+};
+
 const getInvoiceSummary = (
   lineItems: InvoiceLineItem[],
   total: number,
@@ -1665,6 +1675,7 @@ export function ServicesBookingFlow() {
       line_items: lineItems,
       invoice_line_items: lineItems,
       invoice_line_items_json: JSON.stringify(lineItems),
+      invoice_line_items_stripe_form: getStripeInvoiceLinesBody(lineItems),
       invoice_line_items_text: getInvoiceLineItemsText(lineItems),
       invoice_summary: getInvoiceSummary(lineItems, realEstateTotal, realEstateProperty.address),
       invoice_total_label: currency(realEstateTotal),
