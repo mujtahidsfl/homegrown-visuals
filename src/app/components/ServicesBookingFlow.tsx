@@ -497,6 +497,25 @@ const buildLineItem = (
   amount,
 });
 
+const formatInvoiceLineItem = (item: InvoiceLineItem) =>
+  `${item.name} - ${currency(item.amount)}`;
+
+const getInvoiceLineItemsText = (lineItems: InvoiceLineItem[]) =>
+  lineItems.map(formatInvoiceLineItem).join("\n");
+
+const getInvoiceSummary = (
+  lineItems: InvoiceLineItem[],
+  total: number,
+  propertyAddress: string,
+) =>
+  [
+    getInvoiceLineItemsText(lineItems),
+    `Total - ${currency(total)}`,
+    propertyAddress ? `Property Address - ${propertyAddress}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
 const VACANT_LAND_ITEMS = [
   { id: "land_photos_12", label: "12 Photos (mix of aerial + ground)", price: 199 },
   { id: "land_photos_20", label: "20 Photos (mix of aerial + ground)", price: 279 },
@@ -1645,6 +1664,9 @@ export function ServicesBookingFlow() {
       selections,
       line_items: lineItems,
       invoice_line_items: lineItems,
+      invoice_line_items_text: getInvoiceLineItemsText(lineItems),
+      invoice_summary: getInvoiceSummary(lineItems, realEstateTotal, realEstateProperty.address),
+      invoice_total_label: currency(realEstateTotal),
       video_questions: videoQuestions,
       schedule: realEstateSchedule,
       access: {
