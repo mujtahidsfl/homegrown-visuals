@@ -116,6 +116,25 @@ const buildLineItem = (
   amount,
 });
 
+const formatInvoiceLineItem = (item: ReturnType<typeof buildLineItem>) =>
+  `${item.name} - ${currency(item.amount)}`;
+
+const getInvoiceLineItemsText = (lineItems: Array<ReturnType<typeof buildLineItem>>) =>
+  lineItems.map(formatInvoiceLineItem).join("\n");
+
+const getInvoiceSummary = (
+  lineItems: Array<ReturnType<typeof buildLineItem>>,
+  total: number,
+  propertyAddress: string,
+) =>
+  [
+    getInvoiceLineItemsText(lineItems),
+    `Total - ${currency(total)}`,
+    propertyAddress ? `Property Address - ${propertyAddress}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
 export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const navigate = useNavigate();
   const draftRestoredRef = useRef(false);
@@ -363,6 +382,9 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         selections: addonLabels,
         line_items: lineItems,
         invoice_line_items: lineItems,
+        invoice_line_items_text: getInvoiceLineItemsText(lineItems),
+        invoice_summary: getInvoiceSummary(lineItems, estimatedTotal, state.property.address),
+        invoice_total_label: currency(estimatedTotal),
         schedule: {
           preferredDate: state.scheduling.preferredDate,
           preferredTime: state.scheduling.preferredTime,
