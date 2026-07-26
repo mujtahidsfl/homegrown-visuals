@@ -122,6 +122,16 @@ const formatInvoiceLineItem = (item: ReturnType<typeof buildLineItem>) =>
 const getInvoiceLineItemsText = (lineItems: Array<ReturnType<typeof buildLineItem>>) =>
   lineItems.map(formatInvoiceLineItem).join("\n");
 
+const getStripeInvoiceLinesBody = (lineItems: Array<ReturnType<typeof buildLineItem>>) => {
+  const params = new URLSearchParams();
+  lineItems.forEach((item, index) => {
+    params.append(`lines[${index}][amount]`, String(Math.round(item.amount * 100)));
+    params.append(`lines[${index}][currency]`, "usd");
+    params.append(`lines[${index}][description]`, item.name);
+  });
+  return params.toString();
+};
+
 const getInvoiceSummary = (
   lineItems: Array<ReturnType<typeof buildLineItem>>,
   total: number,
@@ -383,6 +393,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         line_items: lineItems,
         invoice_line_items: lineItems,
         invoice_line_items_json: JSON.stringify(lineItems),
+        invoice_line_items_stripe_form: getStripeInvoiceLinesBody(lineItems),
         invoice_line_items_text: getInvoiceLineItemsText(lineItems),
         invoice_summary: getInvoiceSummary(lineItems, estimatedTotal, state.property.address),
         invoice_total_label: currency(estimatedTotal),
