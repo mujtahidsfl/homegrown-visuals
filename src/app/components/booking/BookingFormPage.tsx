@@ -126,7 +126,6 @@ const getStripeInvoiceLinesBody = (lineItems: Array<ReturnType<typeof buildLineI
   const params = new URLSearchParams();
   lineItems.forEach((item, index) => {
     params.append(`lines[${index}][amount]`, String(Math.round(item.amount * 100)));
-    params.append(`lines[${index}][currency]`, "usd");
     params.append(`lines[${index}][description]`, item.name);
   });
   return params.toString();
