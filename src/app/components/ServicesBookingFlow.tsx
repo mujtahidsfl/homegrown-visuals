@@ -1720,6 +1720,8 @@ export function ServicesBookingFlow() {
           estimated_total: realEstateTotal,
         }),
       );
+      servicesSubmissionFinalizedRef.current = true;
+      clearServicesDraft();
       setRealEstateDetailsSaved(true);
       setRealEstateStep(5);
     }
@@ -1819,6 +1821,8 @@ export function ServicesBookingFlow() {
           estimated_total: landTotal,
         }),
       );
+      servicesSubmissionFinalizedRef.current = true;
+      clearServicesDraft();
       setLandDetailsSaved(true);
     }
   };
@@ -2318,6 +2322,7 @@ export function ServicesBookingFlow() {
                       options={availableLandSchedulers}
                       selectedKey={landSchedule.schedulerKey}
                       assignmentMode="auto"
+                      prefillContact={landContact}
                       onSelect={(option) =>
                         setLandSchedule((prev) => ({
                           ...prev,
@@ -3006,6 +3011,7 @@ export function ServicesBookingFlow() {
                     options={availableRealEstateSchedulers}
                     selectedKey={realEstateSchedule.schedulerKey}
                     assignmentMode="auto"
+                    prefillContact={realEstateContact}
                     onSelect={(option) =>
                       setRealEstateSchedule((prev) => ({
                         ...prev,

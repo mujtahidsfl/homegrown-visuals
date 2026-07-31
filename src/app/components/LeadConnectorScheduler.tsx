@@ -24,6 +24,11 @@ type LeadConnectorSchedulerProps = {
   assignmentMode?: "manual" | "auto";
   durationLabel?: string;
   helperNote?: string;
+  prefillContact?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+  };
 };
 
 export function LeadConnectorScheduler({
@@ -35,6 +40,7 @@ export function LeadConnectorScheduler({
   assignmentMode = "manual",
   durationLabel,
   helperNote,
+  prefillContact,
 }: LeadConnectorSchedulerProps) {
   if (!options.length) {
     return (
@@ -65,6 +71,7 @@ export function LeadConnectorScheduler({
   })();
 
   const draftContact =
+    prefillContact ??
     servicesDraft?.realEstateContact ??
     servicesDraft?.realEstateOversizeContact ??
     servicesDraft?.landContact ??
@@ -74,17 +81,17 @@ export function LeadConnectorScheduler({
   const fullName =
     typeof window === "undefined"
       ? ""
-      : (localStorage.getItem("hgv_lead_name") ?? draftContact?.fullName ?? "").trim();
+      : (prefillContact?.fullName ?? localStorage.getItem("hgv_lead_name") ?? draftContact?.fullName ?? "").trim();
   const firstName = fullName.split(" ")[0] ?? "";
   const lastName = fullName.split(" ").slice(1).join(" ");
   const email =
     typeof window === "undefined"
       ? ""
-      : (localStorage.getItem("hgv_lead_email") ?? draftContact?.email ?? "").trim();
+      : (prefillContact?.email ?? localStorage.getItem("hgv_lead_email") ?? draftContact?.email ?? "").trim();
   const phone =
     typeof window === "undefined"
       ? ""
-      : (localStorage.getItem("hgv_lead_phone") ?? draftContact?.phone ?? "").trim();
+      : (prefillContact?.phone ?? localStorage.getItem("hgv_lead_phone") ?? draftContact?.phone ?? "").trim();
 
   const baseCalendarUrl = selectedOption.bookingUrl;
   const params = new URLSearchParams();
