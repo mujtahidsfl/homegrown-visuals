@@ -39,7 +39,20 @@ const PACKAGE_CARD_IMAGES: Record<PackageKey, string> = {
   luxury: luxuryPackageImage,
 };
 
-const currency = (value: number) => `$${value.toLocaleString()}`;
+const currency = (value: number) => {
+  const absoluteValue = Math.abs(value);
+  return `${value < 0 ? "-" : ""}$${absoluteValue.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  })}`;
+};
+const VIDEO_ORDER_DISCOUNT_RATE = 0.1;
+const DISCOUNT_CODES: Record<string, number> = {
+  "2%LOYALTYHGV": 0.02,
+  "5%GOLDHGV%": 0.05,
+  "10%PARTNERHGV%": 0.1,
+};
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+const getDiscountCodeRate = (code: string) => DISCOUNT_CODES[code.trim().toUpperCase()] ?? 0;
 
 type SectionShellProps = {
   children: ReactNode;
@@ -507,7 +520,6 @@ const getStripeInvoiceLinesBody = (lineItems: InvoiceLineItem[]) => {
   const params = new URLSearchParams();
   lineItems.forEach((item, index) => {
     params.append(`lines[${index}][amount]`, String(Math.round(item.amount * 100)));
-    params.append(`lines[${index}][currency]`, "usd");
     params.append(`lines[${index}][description]`, item.name);
   });
   return params.toString();
@@ -525,6 +537,26 @@ const getInvoiceSummary = (
   ]
     .filter(Boolean)
     .join("\n");
+
+const getDiscountLineItems = ({
+  videoDiscount,
+  promoCode,
+  promoDiscount,
+}: {
+  videoDiscount: number;
+  promoCode: string;
+  promoDiscount: number;
+}) => {
+  const lineItems: InvoiceLineItem[] = [];
+  if (videoDiscount > 0) {
+    lineItems.push(buildLineItem("video_order_discount", "10% Video Order Discount", "Discount", -videoDiscount));
+  }
+  const normalizedPromoCode = promoCode.trim();
+  if (promoDiscount > 0 && normalizedPromoCode) {
+    lineItems.push(buildLineItem("discount_code", `Discount Code (${normalizedPromoCode})`, "Discount", -promoDiscount));
+  }
+  return lineItems;
+};
 
 const VACANT_LAND_ITEMS = [
   { id: "land_photos_12", label: "12 Photos (mix of aerial + ground)", price: 199 },
@@ -843,6 +875,7 @@ export function ServicesBookingFlow() {
     phone: "",
     message: "",
   });
+  const [realEstateDiscountCode, setRealEstateDiscountCode] = useState("");
 
   useEffect(() => {
     if (servicesDraftRestoredRef.current) return;
@@ -895,6 +928,7 @@ export function ServicesBookingFlow() {
       socialReelOption ||
       realEstateSelections.some((id) => videoSelectionIds.has(id))
   );
+  const realEstateHasVideo = requiresVideoQuestions;
   const realEstateVideoDetailsComplete = Boolean(
     !requiresVideoQuestions ||
       (videoQuestions.highlights.trim() &&
@@ -1107,7 +1141,39 @@ export function ServicesBookingFlow() {
     return total;
   }, [amenityPhotos, detailOption, droneClipOption, landmarkOption, stagingOption, twilightOption]);
 
-  const realEstateTotal = realEstateBase + realEstateAlaCarteTotal + realEstateEditingTotal;
+  const realEstateSummaryLineItems = useMemo(() => getRealEstateLineItems({
+    realEstatePackage,
+    realEstateSqftTier,
+    realEstateSelections,
+    detailOption,
+    twilightOption,
+    stagingOption,
+    landmarkOption,
+    droneClipOption,
+    amenityPhotos,
+    luxuryReelOption,
+    socialReelOption,
+  }), [
+    amenityPhotos,
+    detailOption,
+    droneClipOption,
+    landmarkOption,
+    luxuryReelOption,
+    realEstatePackage,
+    realEstateSelections,
+    realEstateSqftTier,
+    socialReelOption,
+    stagingOption,
+    twilightOption,
+  ]);
+
+  const realEstateSubtotal = realEstateBase + realEstateAlaCarteTotal + realEstateEditingTotal;
+  const realEstateVideoDiscount = realEstateHasVideo ? roundCurrency(realEstateSubtotal * VIDEO_ORDER_DISCOUNT_RATE) : 0;
+  const realEstateDiscountCodeRate = getDiscountCodeRate(realEstateDiscountCode);
+  const realEstateDiscountCodeAmount = realEstateDiscountCodeRate
+    ? roundCurrency(realEstateSubtotal * realEstateDiscountCodeRate)
+    : 0;
+  const realEstateTotal = Math.max(0, roundCurrency(realEstateSubtotal - realEstateVideoDiscount - realEstateDiscountCodeAmount));
 
   const landTotal = useMemo(() => {
     const item = VACANT_LAND_ITEMS.find((option) => option.id === landSelection);
@@ -1146,6 +1212,7 @@ export function ServicesBookingFlow() {
     additionalInfo,
     realEstateAccess,
     realEstateContact,
+    realEstateDiscountCode,
     realEstateSchedule.schedulerKey,
     specialRequests,
     videoQuestions,
@@ -1217,8 +1284,10 @@ export function ServicesBookingFlow() {
         access: realEstateAccess,
         contact: realEstateContact,
         oversize_contact: realEstateOversizeContact,
+        discount_code: realEstateDiscountCode,
         special_requests: specialRequests,
         additional_info: additionalInfo,
+        subtotal: realEstateSubtotal,
         estimated_total: realEstateTotal,
         estimated_shoot_duration_minutes: realEstateEstimatedDurationMinutes,
         estimated_shoot_duration_label: realEstateEstimatedDurationLabel,
@@ -1317,6 +1386,7 @@ export function ServicesBookingFlow() {
     if (draft.realEstateAccess) setRealEstateAccess(draft.realEstateAccess);
     if (draft.realEstateContact) setRealEstateContact(draft.realEstateContact);
     if (draft.realEstateOversizeContact) setRealEstateOversizeContact(draft.realEstateOversizeContact);
+    if (typeof draft.realEstateDiscountCode === "string") setRealEstateDiscountCode(draft.realEstateDiscountCode);
     if (typeof draft.realEstateDetailsSaved === "boolean") setRealEstateDetailsSaved(draft.realEstateDetailsSaved);
     if (draft.landProperty) setLandProperty(draft.landProperty);
     if (typeof draft.landSelection === "string") setLandSelection(draft.landSelection);
@@ -1382,6 +1452,7 @@ export function ServicesBookingFlow() {
         realEstateAccess,
         realEstateContact,
         realEstateOversizeContact,
+        realEstateDiscountCode,
         realEstateDetailsSaved,
         landProperty,
         landSelection,
@@ -1409,6 +1480,7 @@ export function ServicesBookingFlow() {
     luxuryReelOption,
     realEstateAccess,
     realEstateContact,
+    realEstateDiscountCode,
     realEstateOversizeContact,
     realEstatePackage,
     realEstateProperty,
@@ -1543,6 +1615,7 @@ export function ServicesBookingFlow() {
     });
     setRealEstateContact({ fullName: "", email: "", phone: "", servicesNeeded: "" });
     setRealEstateOversizeContact({ fullName: "", email: "", phone: "", servicesNeeded: "" });
+    setRealEstateDiscountCode("");
     setRealEstateDetailsSaved(false);
     setRealEstateError(null);
   };
@@ -1650,7 +1723,7 @@ export function ServicesBookingFlow() {
       luxuryReelOption,
       socialReelOption,
     });
-    const lineItems = getRealEstateLineItems({
+    const baseLineItems = getRealEstateLineItems({
       realEstatePackage,
       realEstateSqftTier,
       realEstateSelections,
@@ -1663,6 +1736,12 @@ export function ServicesBookingFlow() {
       luxuryReelOption,
       socialReelOption,
     });
+    const discountLineItems = getDiscountLineItems({
+      videoDiscount: realEstateVideoDiscount,
+      promoCode: realEstateDiscountCode,
+      promoDiscount: realEstateDiscountCodeAmount,
+    });
+    const lineItems = [...baseLineItems, ...discountLineItems];
     const payload = {
       form_type: "booking",
       website_booking_id: servicesDraftIdRef.current,
@@ -1672,6 +1751,20 @@ export function ServicesBookingFlow() {
       sqft_tier: realEstateSqftTier || null,
       property_address: realEstateProperty.address,
       selections,
+      subtotal: realEstateSubtotal,
+      discounts: {
+        video_order_discount: {
+          applied: realEstateVideoDiscount > 0,
+          rate: VIDEO_ORDER_DISCOUNT_RATE,
+          amount: realEstateVideoDiscount,
+        },
+        promo_code: {
+          code: realEstateDiscountCode.trim(),
+          applied: realEstateDiscountCodeAmount > 0,
+          rate: realEstateDiscountCodeRate,
+          amount: realEstateDiscountCodeAmount,
+        },
+      },
       line_items: lineItems,
       invoice_line_items: lineItems,
       invoice_line_items_json: JSON.stringify(lineItems),
@@ -1721,6 +1814,8 @@ export function ServicesBookingFlow() {
           estimated_total: realEstateTotal,
         }),
       );
+      servicesSubmissionFinalizedRef.current = true;
+      clearServicesDraft();
       setRealEstateDetailsSaved(true);
       setRealEstateStep(5);
     }
@@ -1820,6 +1915,8 @@ export function ServicesBookingFlow() {
           estimated_total: landTotal,
         }),
       );
+      servicesSubmissionFinalizedRef.current = true;
+      clearServicesDraft();
       setLandDetailsSaved(true);
     }
   };
@@ -2319,6 +2416,7 @@ export function ServicesBookingFlow() {
                       options={availableLandSchedulers}
                       selectedKey={landSchedule.schedulerKey}
                       assignmentMode="auto"
+                      prefillContact={landContact}
                       onSelect={(option) =>
                         setLandSchedule((prev) => ({
                           ...prev,
@@ -2928,28 +3026,16 @@ export function ServicesBookingFlow() {
                   <div className={`p-4 text-[14px] text-[#43526d] ${CARD_BASE}`}>
                     <p className="font-semibold text-[#1F2D5A]">Order summary</p>
                     <div className="mt-2 space-y-1">
-                      {realEstatePackage ? (
-                        <div className="flex justify-between">
-                          <span>{PACKAGE_DISPLAY[realEstatePackage].name}</span>
-                          <span className="font-semibold">{realEstateSqftTier ? currency(BASE_PRICES[realEstatePackage][realEstateSqftTier]) : "-"}</span>
-                        </div>
+                      {realEstateSummaryLineItems.length ? (
+                        realEstateSummaryLineItems.map((item) => (
+                          <div key={item.id} className="flex justify-between gap-4">
+                            <span>{item.name}</span>
+                            <span className="font-semibold">{currency(item.amount)}</span>
+                          </div>
+                        ))
                       ) : (
                         <p>No package selected.</p>
                       )}
-                      {realEstateSelections.map((id) => {
-                        const item = getRealEstateSelection(id);
-                        if (!item) return null;
-                        let priceLabel = "";
-                        if (item.pricingType === "flat") priceLabel = currency(item.price);
-                        else if (item.pricingType === "tier" && realEstateSqftTier) priceLabel = currency(item.prices[realEstateSqftTier]);
-                        else priceLabel = "Enter sqft";
-                        return (
-                          <div key={id} className="flex justify-between">
-                            <span>{item.label}</span>
-                            <span className="font-semibold">{priceLabel}</span>
-                          </div>
-                        );
-                      })}
                       <div className="flex justify-between">
                         <span>Estimated shoot time</span>
                         <span className="font-semibold">{realEstateEstimatedDurationLabel}</span>
@@ -2958,6 +3044,38 @@ export function ServicesBookingFlow() {
                         <span>Rounded booking bucket</span>
                         <span className="font-semibold">{realEstateDurationBucket ? `${realEstateDurationBucket} min` : "Unavailable"}</span>
                       </div>
+                      <div className="pt-3 mt-3 border-t border-[#e4e6ef]">
+                        <label className="block text-[12px] font-semibold text-[#1F2D5A]">Discount code</label>
+                        <input
+                          value={realEstateDiscountCode}
+                          onChange={(e) => setRealEstateDiscountCode(e.target.value)}
+                          placeholder="Enter discount code"
+                          className={`${FORM_INPUT_BASE} mt-1 w-full h-10 rounded-[12px]`}
+                        />
+                        {realEstateDiscountCode.trim() && !realEstateDiscountCodeRate ? (
+                          <p className="mt-1 text-[12px] text-[#c84848]">Code not recognized.</p>
+                        ) : null}
+                      </div>
+                      {realEstateSubtotal !== realEstateTotal ? (
+                        <div className="pt-3 mt-3 border-t border-[#e4e6ef] space-y-1">
+                          <div className="flex justify-between gap-4">
+                            <span>Subtotal</span>
+                            <span className="font-semibold">{currency(realEstateSubtotal)}</span>
+                          </div>
+                          {realEstateVideoDiscount > 0 ? (
+                            <div className="flex justify-between gap-4 text-[#1f7a4d]">
+                              <span>10% video order discount</span>
+                              <span className="font-semibold">{currency(-realEstateVideoDiscount)}</span>
+                            </div>
+                          ) : null}
+                          {realEstateDiscountCodeAmount > 0 ? (
+                            <div className="flex justify-between gap-4 text-[#1f7a4d]">
+                              <span>Discount code</span>
+                              <span className="font-semibold">{currency(-realEstateDiscountCodeAmount)}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                     <p className="mt-3 text-[#1F2D5A] font-semibold">Total: {currency(realEstateTotal)}</p>
                   </div>
@@ -3007,6 +3125,7 @@ export function ServicesBookingFlow() {
                     options={availableRealEstateSchedulers}
                     selectedKey={realEstateSchedule.schedulerKey}
                     assignmentMode="auto"
+                    prefillContact={realEstateContact}
                     onSelect={(option) =>
                       setRealEstateSchedule((prev) => ({
                         ...prev,
