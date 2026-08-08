@@ -94,7 +94,20 @@ const createDraftId = () => {
   }
 };
 
-const currency = (n: number) => `$${n.toLocaleString()}`;
+const currency = (n: number) => {
+  const absoluteValue = Math.abs(n);
+  return `${n < 0 ? "-" : ""}$${absoluteValue.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  })}`;
+};
+const VIDEO_ORDER_DISCOUNT_RATE = 0.1;
+const DISCOUNT_CODES: Record<string, number> = {
+  "2%LOYALTYHGV": 0.02,
+  "5%GOLDHGV%": 0.05,
+  "10%PARTNERHGV%": 0.1,
+};
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+const getDiscountCodeRate = (code: string) => DISCOUNT_CODES[code.trim().toUpperCase()] ?? 0;
 
 function addonPrice(addon: Addon, tier: SqftTierKey | "") {
   if (addon.pricingType === "flat") return addon.flatPrice ?? 0;
@@ -144,6 +157,26 @@ const getInvoiceSummary = (
     .filter(Boolean)
     .join("\n");
 
+const getDiscountLineItems = ({
+  videoDiscount,
+  promoCode,
+  promoDiscount,
+}: {
+  videoDiscount: number;
+  promoCode: string;
+  promoDiscount: number;
+}) => {
+  const lineItems: Array<ReturnType<typeof buildLineItem>> = [];
+  if (videoDiscount > 0) {
+    lineItems.push(buildLineItem("video_order_discount", "10% Video Order Discount", "Discount", -videoDiscount));
+  }
+  const normalizedPromoCode = promoCode.trim();
+  if (promoDiscount > 0 && normalizedPromoCode) {
+    lineItems.push(buildLineItem("discount_code", `Discount Code (${normalizedPromoCode})`, "Discount", -promoDiscount));
+  }
+  return lineItems;
+};
+
 export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const navigate = useNavigate();
   const draftRestoredRef = useRef(false);
@@ -154,6 +187,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const [state, setState] = useState<BookingState>(initialState);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState("");
 
   const packageInfo = PACKAGE_DISPLAY[packageKey];
   const packageAddons = PACKAGE_ADDONS[packageKey];
@@ -174,11 +208,18 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
     if (!addon) return sum;
     return sum + addonPrice(addon, state.property.sqftTier);
   }, 0);
-  const estimatedTotal = basePrice + addonTotal;
-
   const selectedAddonLabels = state.addons
     .map((id) => packageAddons.find((a) => a.id === id))
     .filter(Boolean) as Addon[];
+  const subtotal = basePrice + addonTotal;
+  const hasVideoOrder = Boolean(
+    packageKey === "luxury" ||
+      selectedAddonLabels.some((addon) => /video|reel|walkthrough/i.test(`${addon.category} ${addon.label}`))
+  );
+  const videoDiscount = hasVideoOrder ? roundCurrency(subtotal * VIDEO_ORDER_DISCOUNT_RATE) : 0;
+  const discountCodeRate = getDiscountCodeRate(discountCode);
+  const discountCodeAmount = discountCodeRate ? roundCurrency(subtotal * discountCodeRate) : 0;
+  const estimatedTotal = Math.max(0, roundCurrency(subtotal - videoDiscount - discountCodeAmount));
   const draftStorageKey = `${PACKAGE_DRAFT_STORAGE_PREFIX}_${packageKey}`;
 
   const update = <K extends keyof BookingState>(key: K, value: BookingState[K]) =>
@@ -190,6 +231,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
     }
     abandonmentSentRef.current = false;
     draftIdRef.current = createDraftId();
+    setDiscountCode("");
   };
 
   const buildAbandonmentPayload = () => ({
@@ -226,6 +268,20 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
       marketing: state.smsConsents.marketing,
       transactional: state.smsConsents.transactional,
     },
+    subtotal,
+    discounts: {
+      video_order_discount: {
+        applied: videoDiscount > 0,
+        rate: VIDEO_ORDER_DISCOUNT_RATE,
+        amount: videoDiscount,
+      },
+      promo_code: {
+        code: discountCode.trim(),
+        applied: discountCodeAmount > 0,
+        rate: discountCodeRate,
+        amount: discountCodeAmount,
+      },
+    },
     estimated_total: estimatedTotal,
     source_page: window.location.href,
     submitted_at: new Date().toISOString(),
@@ -249,6 +305,9 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
       }
       if (draft.state) {
         setState(draft.state as BookingState);
+      }
+      if (typeof draft.discountCode === "string") {
+        setDiscountCode(draft.discountCode);
       }
     } catch {
       localStorage.removeItem(draftStorageKey);
@@ -281,11 +340,12 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         package_key: packageKey,
         step,
         state,
+        discountCode,
       }),
     );
 
     abandonmentSentRef.current = false;
-  }, [draftStorageKey, packageKey, state, step]);
+  }, [discountCode, draftStorageKey, packageKey, state, step]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -331,7 +391,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
       window.removeEventListener("pagehide", handleAbandonment);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [estimatedTotal, packageInfo.name, state, step]);
+  }, [discountCode, discountCodeAmount, discountCodeRate, estimatedTotal, packageInfo.name, state, step, subtotal, videoDiscount]);
 
   const next = () => {
     if (step === 1) {
@@ -361,7 +421,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
   const submit = async () => {
     const webhookUrl = PACKAGE_WEBHOOK_URLS[packageKey];
     const addonLabels = selectedAddonLabels.map((addon) => addon.label);
-    const lineItems = [
+    const baseLineItems = [
       ...(state.property.sqftTier
         ? [
             buildLineItem(
@@ -376,6 +436,12 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         .map((addon) => buildLineItem(addon.id, addon.label, addon.category, addonPrice(addon, state.property.sqftTier)))
         .filter((item) => item.amount > 0),
     ];
+    const discountLineItems = getDiscountLineItems({
+      videoDiscount,
+      promoCode: discountCode,
+      promoDiscount: discountCodeAmount,
+    });
+    const lineItems = [...baseLineItems, ...discountLineItems];
     const buildPayload = (retryMode?: string) => {
       const submittedAt = new Date().toISOString();
       const fullName = `${state.agent.firstName} ${state.agent.lastName}`.trim();
@@ -389,6 +455,20 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
         property_address: state.property.address,
         sqft_tier: state.property.sqftTier,
         selections: addonLabels,
+        subtotal,
+        discounts: {
+          video_order_discount: {
+            applied: videoDiscount > 0,
+            rate: VIDEO_ORDER_DISCOUNT_RATE,
+            amount: videoDiscount,
+          },
+          promo_code: {
+            code: discountCode.trim(),
+            applied: discountCodeAmount > 0,
+            rate: discountCodeRate,
+            amount: discountCodeAmount,
+          },
+        },
         line_items: lineItems,
         invoice_line_items: lineItems,
         invoice_line_items_json: JSON.stringify(lineItems),
@@ -435,6 +515,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           shoot_garage: state.property.shootGarage,
         },
         addons: addonLabels,
+        discount_code: discountCode.trim(),
         estimated_total: estimatedTotal,
         scheduling: {
           preferred_date: state.scheduling.preferredDate,
@@ -693,6 +774,25 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                 <p><b>Package:</b> {packageInfo.name}</p>
                 <p><b>Add-ons:</b> {selectedAddonLabels.length ? selectedAddonLabels.map((x) => x.label).join(", ") : "None"}</p>
                 <p><b>Shoot Date:</b> {state.scheduling.preferredDate || "-"} · {state.scheduling.preferredTime || "-"}</p>
+                <div className="pt-3 mt-3 border-t border-[#dbe3ef]">
+                  <label className="block text-[13px] font-semibold text-[#1F3A5F]">Discount code</label>
+                  <input
+                    value={discountCode}
+                    onChange={(e) => setDiscountCode(e.target.value)}
+                    placeholder="Enter discount code"
+                    className="mt-1 h-11 w-full px-4 rounded-[12px] border border-[#d7e0eb]"
+                  />
+                  {discountCode.trim() && !discountCodeRate ? (
+                    <p className="mt-1 text-[12px] text-[#c84848]">Code not recognized.</p>
+                  ) : null}
+                </div>
+                {subtotal !== estimatedTotal ? (
+                  <div className="pt-2 mt-2 border-t border-[#dbe3ef] space-y-1">
+                    <p><b>Subtotal:</b> {currency(subtotal)}</p>
+                    {videoDiscount > 0 ? <p className="text-[#1f7a4d]"><b>10% video order discount:</b> {currency(-videoDiscount)}</p> : null}
+                    {discountCodeAmount > 0 ? <p className="text-[#1f7a4d]"><b>Discount code:</b> {currency(-discountCodeAmount)}</p> : null}
+                  </div>
+                ) : null}
                 <p className="pt-2 mt-2 border-t border-[#dbe3ef] text-[18px]"><b>Total:</b> {currency(estimatedTotal)}</p>
               </div>
               {error && <p className="text-[#c84848]">{error}</p>}
