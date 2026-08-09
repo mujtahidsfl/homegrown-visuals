@@ -70,28 +70,29 @@ export function LeadConnectorScheduler({
     }
   })();
 
-  const draftContact =
-    prefillContact ??
+  const storedContact =
     servicesDraft?.realEstateContact ??
     servicesDraft?.realEstateOversizeContact ??
     servicesDraft?.landContact ??
     servicesDraft?.socialContact ??
     null;
+  const draftContact = prefillContact ?? storedContact;
+  const allowStoredLeadFallback = !prefillContact;
 
   const fullName =
     typeof window === "undefined"
       ? ""
-      : (prefillContact?.fullName ?? localStorage.getItem("hgv_lead_name") ?? draftContact?.fullName ?? "").trim();
+      : (prefillContact?.fullName ?? (allowStoredLeadFallback ? localStorage.getItem("hgv_lead_name") : null) ?? draftContact?.fullName ?? "").trim();
   const firstName = fullName.split(" ")[0] ?? "";
   const lastName = fullName.split(" ").slice(1).join(" ");
   const email =
     typeof window === "undefined"
       ? ""
-      : (prefillContact?.email ?? localStorage.getItem("hgv_lead_email") ?? draftContact?.email ?? "").trim();
+      : (prefillContact?.email ?? (allowStoredLeadFallback ? localStorage.getItem("hgv_lead_email") : null) ?? draftContact?.email ?? "").trim();
   const phone =
     typeof window === "undefined"
       ? ""
-      : (prefillContact?.phone ?? localStorage.getItem("hgv_lead_phone") ?? draftContact?.phone ?? "").trim();
+      : (prefillContact?.phone ?? (allowStoredLeadFallback ? localStorage.getItem("hgv_lead_phone") : null) ?? draftContact?.phone ?? "").trim();
 
   const baseCalendarUrl = selectedOption.bookingUrl;
   const params = new URLSearchParams();
