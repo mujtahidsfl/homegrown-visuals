@@ -1870,10 +1870,7 @@ export function ServicesBookingFlow() {
       setLandError("Please agree to the terms before continuing to the booking calendar.");
       return;
     }
-    const webhookUrl =
-      landSelection === "land_package"
-        ? "https://hook.us2.make.com/aysxphkcy7v9vmbhye2rexq2u42xxxit"
-        : PACKAGE_WEBHOOK_URLS.standard;
+    const webhookUrl = "https://hook.us2.make.com/aysxphkcy7v9vmbhye2rexq2u42xxxit";
     const landItem = VACANT_LAND_ITEMS.find((item) => item.id === landSelection);
     const payload = {
       form_type: "booking",
