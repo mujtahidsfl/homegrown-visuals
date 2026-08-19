@@ -86,6 +86,7 @@ const initialState = (): BookingState => ({
 
 const TODAY = new Date().toISOString().split("T")[0];
 const PACKAGE_DRAFT_STORAGE_PREFIX = "hgv_package_booking_draft_v1";
+const DRAFT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 const createDraftId = () => {
   try {
@@ -298,6 +299,11 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
 
     try {
       const draft = JSON.parse(rawDraft) as Record<string, any>;
+      const savedAt = typeof draft.saved_at === "string" ? Date.parse(draft.saved_at) : NaN;
+      if (!Number.isFinite(savedAt) || Date.now() - savedAt > DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(draftStorageKey);
+        return;
+      }
       if (draft.draft_id) {
         draftIdRef.current = draft.draft_id;
       }

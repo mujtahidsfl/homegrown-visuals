@@ -572,6 +572,7 @@ const VACANT_LAND_ITEMS = [
 
 const TODAY = new Date().toISOString().split("T")[0];
 const SERVICES_DRAFT_STORAGE_KEY = "hgv_services_booking_draft_v1";
+const DRAFT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const DURATION_BUCKETS = [30, 60, 90, 120, 150, 180, 240, 300, 360] as const;
 
 const DEAN_BUCKET_CALENDARS: Record<number, SchedulerOption> = {
@@ -1411,6 +1412,12 @@ export function ServicesBookingFlow() {
 
     try {
       const draft = JSON.parse(rawDraft) as Record<string, any>;
+      const savedAt = typeof draft.saved_at === "string" ? Date.parse(draft.saved_at) : NaN;
+      if (!Number.isFinite(savedAt) || Date.now() - savedAt > DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(SERVICES_DRAFT_STORAGE_KEY);
+        servicesDraftRestoredRef.current = true;
+        return;
+      }
       setPendingServicesDraft(draft);
       setDraftDecisionOpen(true);
     } catch {
@@ -1881,6 +1888,7 @@ export function ServicesBookingFlow() {
     }
     const webhookUrl = "https://hook.us2.make.com/aysxphkcy7v9vmbhye2rexq2u42xxxit";
     const landItem = VACANT_LAND_ITEMS.find((item) => item.id === landSelection);
+    const lineItems = landItem ? [buildLineItem(landItem.id, landItem.label, "Vacant Land", landItem.price)] : [];
     const payload = {
       form_type: "booking",
       website_booking_id: servicesDraftIdRef.current,
@@ -1888,6 +1896,13 @@ export function ServicesBookingFlow() {
       property_address: landProperty.address,
       selections: landSelection ? [landSelection] : [],
       package: landItem?.label ?? null,
+      line_items: lineItems,
+      invoice_line_items: lineItems,
+      invoice_line_items_json: JSON.stringify(lineItems),
+      invoice_line_items_stripe_form: getStripeInvoiceLinesBody(lineItems),
+      invoice_line_items_text: getInvoiceLineItemsText(lineItems),
+      invoice_summary: getInvoiceSummary(lineItems, landTotal, landProperty.address),
+      invoice_total_label: currency(landTotal),
       schedule: landSchedule,
       contact: landContact,
       estimated_shoot_duration_minutes: landEstimatedDurationMinutes,
