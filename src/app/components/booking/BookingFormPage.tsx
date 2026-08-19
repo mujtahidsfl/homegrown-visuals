@@ -8,6 +8,7 @@ import {
   sendGoogleSheetsFromPayloadKeepalive,
 } from "../../backupEmail";
 import { AddressAutocompleteInput } from "../AddressAutocompleteInput";
+import { submitGhlBookingPreflight } from "../../booking/ghlPreflight";
 import {
   BASE_PRICES,
   PACKAGE_ADDONS,
@@ -537,10 +538,14 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
       };
     };
 
+    let preflightComplete = false;
+    let payload: ReturnType<typeof buildPayload> | null = null;
     try {
       setSubmitting(true);
       setError(null);
-      const payload = buildPayload();
+      payload = buildPayload();
+      await submitGhlBookingPreflight(payload);
+      preflightComplete = true;
 
       sendBackupEmailFromPayload(payload, {
         source: "package_booking_form",
@@ -574,6 +579,11 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
 
       navigate("/confirmation");
     } catch (e) {
+      if (!preflightComplete || !payload) {
+        setError("We couldn't prepare the booking details in the CRM right now. Please try again.");
+        return;
+      }
+
       try {
         // Fallback for endpoints that reject CORS preflight.
         await fetch(webhookUrl, {
@@ -581,13 +591,13 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
           mode: "no-cors",
           keepalive: true,
           headers: { "Content-Type": "text/plain;charset=UTF-8" },
-          body: JSON.stringify(buildPayload("no-cors-fallback")),
+          body: JSON.stringify({ ...payload, retry_mode: "no-cors-fallback" }),
         });
       } catch {
         // Last-resort fire-and-forget fallback for browsers/networks that block cross-origin fetch.
         const ok = navigator.sendBeacon(
           webhookUrl,
-          JSON.stringify(buildPayload("sendBeacon-fallback"))
+          JSON.stringify({ ...payload, retry_mode: "sendBeacon-fallback" })
         );
 
         if (!ok) {

@@ -16,6 +16,7 @@ import {
   type PackageKey,
   type SqftTierKey,
 } from "../booking/config";
+import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
 import {
   sendBackupEmailFromFormData,
   sendBackupEmailFromPayload,
@@ -1666,9 +1667,17 @@ export function ServicesBookingFlow() {
   };
 
   const submitBooking = async (payload: Record<string, unknown>, webhookUrl: string, setError: (message: string | null) => void, setSubmitting: (value: boolean) => void) => {
+    setSubmitting(true);
+    setError(null);
     try {
-      setSubmitting(true);
-      setError(null);
+      await submitGhlBookingPreflight(payload);
+    } catch {
+      setSubmitting(false);
+      setError("We couldn't prepare the booking details in the CRM right now. Please try again.");
+      return false;
+    }
+
+    try {
       const response = await fetch(webhookUrl, {
         method: "POST",
         keepalive: true,
