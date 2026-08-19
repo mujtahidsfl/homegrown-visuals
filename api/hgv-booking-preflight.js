@@ -62,7 +62,7 @@ export default async function handler(req, res) {
   const token = process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN;
   const locationId = process.env.GHL_LOCATION_ID || DEFAULT_LOCATION_ID;
   if (!token) {
-    return json(res, 500, { ok: false, error: "GHL token is not configured" });
+    return json(res, 200, { ok: true, skipped: "GHL token is not configured" });
   }
 
   let payload = {};
