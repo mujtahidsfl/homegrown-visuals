@@ -6,6 +6,8 @@ type AddressAutocompleteInputProps = {
   onChange: (value: string) => void;
   placeholder: string;
   className?: string;
+  // Layout classes belong on the wrapper, since that is the grid/flex child.
+  containerClassName?: string;
 };
 
 export function AddressAutocompleteInput({
@@ -13,6 +15,7 @@ export function AddressAutocompleteInput({
   onChange,
   placeholder,
   className,
+  containerClassName,
 }: AddressAutocompleteInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -126,7 +129,7 @@ export function AddressAutocompleteInput({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={`relative ${containerClassName ?? ""}`}>
       <input
         ref={inputRef}
         value={value}

@@ -166,7 +166,7 @@ function packageChooserReply(question: string): AssistantReply {
 
   return {
     answer: [
-      `For a ${sqft.toLocaleString()} sqft home, ${recommendation} It’s the most popular option because it includes listing photos, aerial photos, Zillow Showcase, and 1 virtual twilight.`,
+      `For a ${sqft.toLocaleString()} sqft home, ${recommendation} It’s the most popular option because it includes listing photos, drone photos, Zillow 3D Tour, and 1 virtual twilight.`,
       "",
       "Packages:",
       ...packageLines,

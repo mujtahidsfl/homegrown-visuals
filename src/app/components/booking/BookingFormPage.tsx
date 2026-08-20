@@ -224,10 +224,10 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
     .map((id) => packageAddons.find((a) => a.id === id))
     .filter(Boolean) as Addon[];
   const subtotal = basePrice + addonTotal;
-  const videoDiscountPrices = selectedAddonLabels
+  const videoDiscountItems = selectedAddonLabels
     .filter((addon) => VIDEO_DISCOUNT_ADDON_IDS.has(addon.id))
-    .map((addon) => addonPrice(addon, state.property.sqftTier));
-  const videoDiscount = getVideoOrderDiscount(videoDiscountPrices, subtotal);
+    .map((addon) => ({ id: addon.id, price: addonPrice(addon, state.property.sqftTier) }));
+  const videoDiscount = getVideoOrderDiscount(videoDiscountItems, subtotal);
   const discountCodeRate = getDiscountCodeRate(discountCode);
   const discountCodeAmount = discountCodeRate ? roundCurrency(subtotal * discountCodeRate) : 0;
   const estimatedTotal = Math.max(0, roundCurrency(subtotal - videoDiscount - discountCodeAmount));
@@ -731,7 +731,8 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                   placeholder="Property Address"
                   value={state.property.address}
                   onChange={(address) => update("property", { ...state.property, address })}
-                  className="h-12 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] sm:col-span-2"
+                  className="h-12 w-full px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9]"
+                  containerClassName="sm:col-span-2"
                 />
                 <input placeholder="Unit Number (optional)" value={state.property.unit} onChange={(e) => update("property", { ...state.property, unit: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
                 <select value={state.property.sqftTier} onChange={(e) => update("property", { ...state.property, sqftTier: e.target.value as SqftTierKey })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]">
@@ -761,10 +762,15 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                     )}
                     <div className="space-y-2.5">
                       {addons.map((addon) => (
-                        <label key={addon.id} className="flex items-center justify-between gap-3 text-[14px]">
-                          <span className="flex items-center gap-2">
-                            <input type="checkbox" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
-                            {addon.label}
+                        <label key={addon.id} className="flex items-start justify-between gap-3 text-[14px]">
+                          <span className="flex items-start gap-2">
+                            <input type="checkbox" className="mt-1" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
+                            <span>
+                              <span className="block">{addon.label}</span>
+                              {addon.description ? (
+                                <span className="mt-1 block text-[12px] leading-5 text-[#6b768c]">{addon.description}</span>
+                              ) : null}
+                            </span>
                           </span>
                           <span className="text-[#1F3A5F] font-semibold">{currency(addonPrice(addon, state.property.sqftTier))}</span>
                         </label>
@@ -810,7 +816,7 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                     value={discountCode}
                     onChange={(e) => setDiscountCode(e.target.value)}
                     placeholder="If applicable, apply discount code here"
-                    className="mt-1 h-11 w-full px-4 rounded-[12px] border border-[#d7e0eb]"
+                    className="mt-1 h-12 w-full px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9]"
                   />
                   {discountCode.trim() && !discountCodeRate ? (
                     <p className="mt-1 text-[12px] text-[#c84848]">Code not recognized.</p>

@@ -27,7 +27,7 @@ export const PACKAGE_DISPLAY = {
     subtitle: "Best for clean, high-impact listing launches.",
     includes: [
       "Listing photos",
-      "Aerial photos",
+      "Drone photos",
       "Floorplan",
       "Fast media delivery for active listings",
     ],
@@ -39,8 +39,8 @@ export const PACKAGE_DISPLAY = {
     subtitle: "Most booked package for agents who want stronger listing engagement.",
     includes: [
       "Listing photos",
-      "Aerial photos",
-      "Zillow Showcase",
+      "Drone photos",
+      "Zillow 3D Tour",
       "1 virtual twilight",
     ],
   },
@@ -51,8 +51,8 @@ export const PACKAGE_DISPLAY = {
     subtitle: "Premium media stack for high-end properties and standout marketing.",
     includes: [
       "Listing photos",
-      "Aerial photos",
-      "Zillow Showcase",
+      "Drone photos",
+      "Zillow 3D Tour",
       "2 virtual twilights",
       "45-60sec luxury reel",
     ],
@@ -62,6 +62,7 @@ export const PACKAGE_DISPLAY = {
 export type Addon = {
   id: string;
   label: string;
+  description?: string;
   category: string;
   pricingType: "flat" | "sqft";
   flatPrice?: number;
@@ -95,7 +96,7 @@ const STANDARD_ADDONS: Addon[] = [
   { id: "stage_1", label: "Virtual Staging - 1 Room", category: "Virtual Staging", pricingType: "flat", flatPrice: 30 },
   { id: "stage_2", label: "Virtual Staging - 2 Rooms", category: "Virtual Staging", pricingType: "flat", flatPrice: 60 },
   { id: "stage_5", label: "Virtual Staging - 5 Rooms", category: "Virtual Staging", pricingType: "flat", flatPrice: 125 },
-  { id: "zillow_3d", label: "Zillow 3D Tour", category: "3D Tour", pricingType: "sqft", sqftPrices: SQFT_PRICING(149, 179, 199, 219) },
+  { id: "zillow_3d", label: "Zillow 3D Tour", description: "3D walkthrough tour of home", category: "3D Tour", pricingType: "sqft", sqftPrices: SQFT_PRICING(149, 179, 199, 219) },
 ];
 
 const ZILLOW_ONLY: Addon[] = [
