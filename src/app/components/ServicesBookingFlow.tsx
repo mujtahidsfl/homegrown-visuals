@@ -18,6 +18,13 @@ import {
 } from "../booking/config";
 import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
 import {
+  VIDEO_ORDER_DISCOUNT_NOTE,
+  VIDEO_ORDER_DISCOUNT_RATE,
+  getDiscountCodeRate,
+  getVideoOrderDiscount,
+  roundCurrency,
+} from "../booking/discounts";
+import {
   sendBackupEmailFromFormData,
   sendBackupEmailFromPayload,
   sendBackupEmailFromPayloadKeepalive,
@@ -43,17 +50,10 @@ const PACKAGE_CARD_IMAGES: Record<PackageKey, string> = {
 const currency = (value: number) => {
   const absoluteValue = Math.abs(value);
   return `${value < 0 ? "-" : ""}$${absoluteValue.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(absoluteValue) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
 };
-const VIDEO_ORDER_DISCOUNT_RATE = 0.1;
-const DISCOUNT_CODES: Record<string, number> = {
-  "2%LOYALTYHGV": 0.02,
-  "5%GOLDHGV%": 0.05,
-  "10%PARTNERHGV%": 0.1,
-};
-const roundCurrency = (value: number) => Math.round(value * 100) / 100;
-const getDiscountCodeRate = (code: string) => DISCOUNT_CODES[code.trim().toUpperCase()] ?? 0;
 
 type SectionShellProps = {
   children: ReactNode;
@@ -227,6 +227,10 @@ const REAL_ESTATE_SOCIAL_REEL_OPTIONS = [
   { id: "re_sm_3", label: "3 x 15–30sec Reels", price: 979 },
   { id: "re_sm_5", label: "5 x 15–30sec Reels", price: 1499 },
 ];
+
+// Multi-reel bundles already carry their own volume discount, so they are not
+// eligible for the 10% video order discount.
+const VIDEO_DISCOUNT_SOCIAL_REEL_IDS = new Set(["re_sm_1", "re_sm_1_ai"]);
 
 const REAL_ESTATE_AMENITY_PRICE = 54;
 
@@ -930,7 +934,6 @@ export function ServicesBookingFlow() {
       socialReelOption ||
       realEstateSelections.some((id) => videoSelectionIds.has(id))
   );
-  const realEstateHasVideo = requiresVideoQuestions;
   const realEstateVideoDetailsComplete = Boolean(
     !requiresVideoQuestions ||
       (videoQuestions.highlights.trim() &&
@@ -1169,8 +1172,35 @@ export function ServicesBookingFlow() {
     twilightOption,
   ]);
 
+  const realEstateVideoDiscountPrices = useMemo(() => {
+    const prices: number[] = [];
+    const tier = realEstateSqftTier;
+
+    REAL_ESTATE_VIDEO_ITEMS.forEach((item) => {
+      if (!realEstateSelections.includes(item.id)) return;
+      if (item.pricingType === "tier" && tier) prices.push(item.prices[tier]);
+    });
+
+    REAL_ESTATE_HIGHLIGHT_REEL_OPTIONS.forEach((item) => {
+      if (!realEstateSelections.includes(item.id)) return;
+      prices.push(item.price);
+    });
+
+    REAL_ESTATE_VIDEO_FLAT_ITEMS.forEach((item) => {
+      if (!realEstateSelections.includes(item.id)) return;
+      prices.push(item.price);
+    });
+
+    const luxury = REAL_ESTATE_LUXURY_REEL_OPTIONS.find((option) => option.id === luxuryReelOption);
+    if (luxury) prices.push(luxury.price);
+    const social = REAL_ESTATE_SOCIAL_REEL_OPTIONS.find((option) => option.id === socialReelOption);
+    if (social && VIDEO_DISCOUNT_SOCIAL_REEL_IDS.has(social.id)) prices.push(social.price);
+
+    return prices;
+  }, [luxuryReelOption, realEstateSelections, realEstateSqftTier, socialReelOption]);
+
   const realEstateSubtotal = realEstateBase + realEstateAlaCarteTotal + realEstateEditingTotal;
-  const realEstateVideoDiscount = realEstateHasVideo ? roundCurrency(realEstateSubtotal * VIDEO_ORDER_DISCOUNT_RATE) : 0;
+  const realEstateVideoDiscount = getVideoOrderDiscount(realEstateVideoDiscountPrices, realEstateSubtotal);
   const realEstateDiscountCodeRate = getDiscountCodeRate(realEstateDiscountCode);
   const realEstateDiscountCodeAmount = realEstateDiscountCodeRate
     ? roundCurrency(realEstateSubtotal * realEstateDiscountCodeRate)
@@ -2720,6 +2750,7 @@ export function ServicesBookingFlow() {
                   <div className="mt-5 space-y-6">
                     <div>
                       <p className="text-[#1F2D5A] font-semibold">Video</p>
+                      <p className="mt-1 text-[12px] leading-5 text-[#1f7a4d] font-semibold">{VIDEO_ORDER_DISCOUNT_NOTE}</p>
                       <div className="mt-3 grid md:grid-cols-2 gap-3">
                         <div className={`px-4 py-3 ${CARD_BASE}`}>
                           <p className="text-[#1F2D5A] text-[14px] font-semibold">30sec Highlight Reel</p>
@@ -3070,7 +3101,7 @@ export function ServicesBookingFlow() {
                         <input
                           value={realEstateDiscountCode}
                           onChange={(e) => setRealEstateDiscountCode(e.target.value)}
-                          placeholder="Enter discount code"
+                          placeholder="If applicable, apply discount code here"
                           className={`${FORM_INPUT_BASE} mt-1 w-full h-10 rounded-[12px]`}
                         />
                         {realEstateDiscountCode.trim() && !realEstateDiscountCodeRate ? (
@@ -3156,6 +3187,32 @@ export function ServicesBookingFlow() {
                       }))
                     }
                   />
+                </div>
+                <div className="mt-6 pt-5 border-t border-[#e4e6ef] text-[14px] text-[#51607b]">
+                  <p className="text-[#1F2D5A] font-semibold">Order total</p>
+                  <div className="mt-3 space-y-1">
+                    <div className="flex justify-between gap-4">
+                      <span>Subtotal</span>
+                      <span className="font-semibold">{currency(realEstateSubtotal)}</span>
+                    </div>
+                    {realEstateVideoDiscount > 0 ? (
+                      <div className="flex justify-between gap-4 text-[#1f7a4d]">
+                        <span>10% video order discount</span>
+                        <span className="font-semibold">{currency(-realEstateVideoDiscount)}</span>
+                      </div>
+                    ) : null}
+                    {realEstateDiscountCodeAmount > 0 ? (
+                      <div className="flex justify-between gap-4 text-[#1f7a4d]">
+                        <span>Discount code ({realEstateDiscountCode.trim()})</span>
+                        <span className="font-semibold">{currency(-realEstateDiscountCodeAmount)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between gap-4 pt-2 mt-2 border-t border-[#e4e6ef] text-[#1F2D5A] text-[16px]">
+                      <span className="font-semibold">Total due</span>
+                      <span className="font-semibold">{currency(realEstateTotal)}</span>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[12px] text-[#6b768c]">Your invoice will be sent for this total.</p>
                 </div>
               </SectionShell>
             )}
