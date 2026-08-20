@@ -10,6 +10,13 @@ import {
 import { AddressAutocompleteInput } from "../AddressAutocompleteInput";
 import { submitGhlBookingPreflight } from "../../booking/ghlPreflight";
 import {
+  VIDEO_ORDER_DISCOUNT_NOTE,
+  VIDEO_ORDER_DISCOUNT_RATE,
+  getDiscountCodeRate,
+  getVideoOrderDiscount,
+  roundCurrency,
+} from "../../booking/discounts";
+import {
   BASE_PRICES,
   PACKAGE_ADDONS,
   PACKAGE_DISPLAY,
@@ -99,17 +106,20 @@ const createDraftId = () => {
 const currency = (n: number) => {
   const absoluteValue = Math.abs(n);
   return `${n < 0 ? "-" : ""}$${absoluteValue.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(absoluteValue) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
 };
-const VIDEO_ORDER_DISCOUNT_RATE = 0.1;
-const DISCOUNT_CODES: Record<string, number> = {
-  "2%LOYALTYHGV": 0.02,
-  "5%GOLDHGV%": 0.05,
-  "10%PARTNERHGV%": 0.1,
-};
-const roundCurrency = (value: number) => Math.round(value * 100) / 100;
-const getDiscountCodeRate = (code: string) => DISCOUNT_CODES[code.trim().toUpperCase()] ?? 0;
+// Video add-ons eligible for the 10% video order discount. Multi-reel bundles
+// (sm_reel_2/3/5) already carry their own volume discount and are excluded.
+const VIDEO_DISCOUNT_ADDON_IDS = new Set([
+  "cinematic_video",
+  "drone_video_30",
+  "sm_reel_1",
+  "luxury_area",
+  "luxury_ai",
+  "luxury_day_night",
+]);
 
 function addonPrice(addon: Addon, tier: SqftTierKey | "") {
   if (addon.pricingType === "flat") return addon.flatPrice ?? 0;
@@ -214,11 +224,10 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
     .map((id) => packageAddons.find((a) => a.id === id))
     .filter(Boolean) as Addon[];
   const subtotal = basePrice + addonTotal;
-  const hasVideoOrder = Boolean(
-    packageKey === "luxury" ||
-      selectedAddonLabels.some((addon) => /video|reel|walkthrough/i.test(`${addon.category} ${addon.label}`))
-  );
-  const videoDiscount = hasVideoOrder ? roundCurrency(subtotal * VIDEO_ORDER_DISCOUNT_RATE) : 0;
+  const videoDiscountItems = selectedAddonLabels
+    .filter((addon) => VIDEO_DISCOUNT_ADDON_IDS.has(addon.id))
+    .map((addon) => ({ id: addon.id, price: addonPrice(addon, state.property.sqftTier) }));
+  const videoDiscount = getVideoOrderDiscount(videoDiscountItems, subtotal);
   const discountCodeRate = getDiscountCodeRate(discountCode);
   const discountCodeAmount = discountCodeRate ? roundCurrency(subtotal * discountCodeRate) : 0;
   const estimatedTotal = Math.max(0, roundCurrency(subtotal - videoDiscount - discountCodeAmount));
@@ -722,7 +731,8 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                   placeholder="Property Address"
                   value={state.property.address}
                   onChange={(address) => update("property", { ...state.property, address })}
-                  className="h-12 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] sm:col-span-2"
+                  className="h-12 w-full px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9]"
+                  containerClassName="sm:col-span-2"
                 />
                 <input placeholder="Unit Number (optional)" value={state.property.unit} onChange={(e) => update("property", { ...state.property, unit: e.target.value })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]" />
                 <select value={state.property.sqftTier} onChange={(e) => update("property", { ...state.property, sqftTier: e.target.value as SqftTierKey })} className="h-12 px-4 rounded-[12px] border border-[#d7e0eb]">
@@ -744,13 +754,23 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
               <div className="mt-5 grid md:grid-cols-2 gap-5">
                 {groupedAddons.map(([category, addons]) => (
                   <div key={category} className="border border-[#dbe3ef] rounded-[14px] p-4">
-                    <p className="text-[#1F3A5F] font-semibold mb-3">{category}</p>
+                    <p className="text-[#1F3A5F] font-semibold">{category}</p>
+                    {addons.some((addon) => VIDEO_DISCOUNT_ADDON_IDS.has(addon.id)) ? (
+                      <p className="mt-1 mb-3 text-[12px] leading-5 text-[#1f7a4d] font-semibold">{VIDEO_ORDER_DISCOUNT_NOTE}</p>
+                    ) : (
+                      <div className="mb-3" />
+                    )}
                     <div className="space-y-2.5">
                       {addons.map((addon) => (
-                        <label key={addon.id} className="flex items-center justify-between gap-3 text-[14px]">
-                          <span className="flex items-center gap-2">
-                            <input type="checkbox" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
-                            {addon.label}
+                        <label key={addon.id} className="flex items-start justify-between gap-3 text-[14px]">
+                          <span className="flex items-start gap-2">
+                            <input type="checkbox" className="mt-1" checked={state.addons.includes(addon.id)} onChange={() => toggleAddon(addon.id)} />
+                            <span>
+                              <span className="block">{addon.label}</span>
+                              {addon.description ? (
+                                <span className="mt-1 block text-[12px] leading-5 text-[#6b768c]">{addon.description}</span>
+                              ) : null}
+                            </span>
                           </span>
                           <span className="text-[#1F3A5F] font-semibold">{currency(addonPrice(addon, state.property.sqftTier))}</span>
                         </label>
@@ -795,8 +815,8 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
                   <input
                     value={discountCode}
                     onChange={(e) => setDiscountCode(e.target.value)}
-                    placeholder="Enter discount code"
-                    className="mt-1 h-11 w-full px-4 rounded-[12px] border border-[#d7e0eb]"
+                    placeholder="If applicable, apply discount code here"
+                    className="mt-1 h-12 w-full px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9]"
                   />
                   {discountCode.trim() && !discountCodeRate ? (
                     <p className="mt-1 text-[12px] text-[#c84848]">Code not recognized.</p>

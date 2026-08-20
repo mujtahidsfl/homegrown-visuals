@@ -18,6 +18,14 @@ import {
 } from "../booking/config";
 import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
 import {
+  VIDEO_ORDER_DISCOUNT_NOTE,
+  VIDEO_ORDER_DISCOUNT_RATE,
+  getDiscountCodeRate,
+  getVideoOrderDiscount,
+  roundCurrency,
+  type VideoDiscountItem,
+} from "../booking/discounts";
+import {
   sendBackupEmailFromFormData,
   sendBackupEmailFromPayload,
   sendBackupEmailFromPayloadKeepalive,
@@ -43,17 +51,10 @@ const PACKAGE_CARD_IMAGES: Record<PackageKey, string> = {
 const currency = (value: number) => {
   const absoluteValue = Math.abs(value);
   return `${value < 0 ? "-" : ""}$${absoluteValue.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(absoluteValue) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
 };
-const VIDEO_ORDER_DISCOUNT_RATE = 0.1;
-const DISCOUNT_CODES: Record<string, number> = {
-  "2%LOYALTYHGV": 0.02,
-  "5%GOLDHGV%": 0.05,
-  "10%PARTNERHGV%": 0.1,
-};
-const roundCurrency = (value: number) => Math.round(value * 100) / 100;
-const getDiscountCodeRate = (code: string) => DISCOUNT_CODES[code.trim().toUpperCase()] ?? 0;
 
 type SectionShellProps = {
   children: ReactNode;
@@ -87,28 +88,28 @@ type StepTimelineProps = {
 };
 
 const StepTimeline = ({ steps, activeStep }: StepTimelineProps) => (
-  <div className="w-full overflow-x-auto pb-2">
-    <div className="flex items-center gap-3 min-w-[520px] sm:min-w-0">
+  <div className="w-full pb-2">
+    <div className="flex items-start sm:items-center gap-1 sm:gap-3">
       {steps.map((step, index) => {
         const stepNumber = index + 1;
         const isActive = stepNumber === activeStep;
         const isComplete = stepNumber < activeStep;
         return (
-          <div key={step} className="flex items-center gap-3 flex-1 min-w-[110px] sm:min-w-0">
+          <div key={step} className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 flex-1 min-w-0">
             <div
-              className={`h-8 w-8 rounded-full flex items-center justify-center text-[12px] font-semibold ${
+              className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-[12px] font-semibold ${
                 isComplete ? "bg-[#111111] text-white" : isActive ? "border border-[#111111] text-[#111111] bg-white" : "border border-[#d9dce3] text-[#6b7280] bg-white"
               }`}
             >
               {stepNumber}
             </div>
             <span
-              className={`text-[12px] sm:text-[13px] whitespace-nowrap ${isActive ? "text-[#111111]" : "text-[#6b7280]"}`}
+              className={`text-[11px] sm:text-[13px] text-center sm:text-left whitespace-nowrap ${isActive ? "text-[#111111]" : "text-[#6b7280]"}`}
               style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: isActive ? 600 : 500 }}
             >
               {step}
             </span>
-            {index < steps.length - 1 && <span className="flex-1 h-px bg-[#e5e7eb] min-w-[24px]" />}
+            {index < steps.length - 1 && <span className="hidden sm:block flex-1 h-px bg-[#e5e7eb] min-w-[24px]" />}
           </div>
         );
       })}
@@ -145,6 +146,7 @@ const REAL_ESTATE_PHOTO_ITEMS = [
   {
     id: "re_zillow_3d",
     label: "Zillow 3D",
+    description: "3D walkthrough tour of home",
     pricingType: "tier" as const,
     prices: { under_1500: 149, "1500_2499": 179, "2500_3999": 199, "4000_5500": 219 },
   },
@@ -227,6 +229,10 @@ const REAL_ESTATE_SOCIAL_REEL_OPTIONS = [
   { id: "re_sm_3", label: "3 x 15–30sec Reels", price: 979 },
   { id: "re_sm_5", label: "5 x 15–30sec Reels", price: 1499 },
 ];
+
+// Multi-reel bundles already carry their own volume discount, so they are not
+// eligible for the 10% video order discount.
+const VIDEO_DISCOUNT_SOCIAL_REEL_IDS = new Set(["re_sm_1", "re_sm_1_ai"]);
 
 const REAL_ESTATE_AMENITY_PRICE = 54;
 
@@ -930,7 +936,6 @@ export function ServicesBookingFlow() {
       socialReelOption ||
       realEstateSelections.some((id) => videoSelectionIds.has(id))
   );
-  const realEstateHasVideo = requiresVideoQuestions;
   const realEstateVideoDetailsComplete = Boolean(
     !requiresVideoQuestions ||
       (videoQuestions.highlights.trim() &&
@@ -1169,8 +1174,35 @@ export function ServicesBookingFlow() {
     twilightOption,
   ]);
 
+  const realEstateVideoDiscountItems = useMemo(() => {
+    const items: VideoDiscountItem[] = [];
+    const tier = realEstateSqftTier;
+
+    REAL_ESTATE_VIDEO_ITEMS.forEach((item) => {
+      if (!realEstateSelections.includes(item.id)) return;
+      if (item.pricingType === "tier" && tier) items.push({ id: item.id, price: item.prices[tier] });
+    });
+
+    REAL_ESTATE_HIGHLIGHT_REEL_OPTIONS.forEach((item) => {
+      if (!realEstateSelections.includes(item.id)) return;
+      items.push({ id: item.id, price: item.price });
+    });
+
+    REAL_ESTATE_VIDEO_FLAT_ITEMS.forEach((item) => {
+      if (!realEstateSelections.includes(item.id)) return;
+      items.push({ id: item.id, price: item.price });
+    });
+
+    const luxury = REAL_ESTATE_LUXURY_REEL_OPTIONS.find((option) => option.id === luxuryReelOption);
+    if (luxury) items.push({ id: luxury.id, price: luxury.price });
+    const social = REAL_ESTATE_SOCIAL_REEL_OPTIONS.find((option) => option.id === socialReelOption);
+    if (social && VIDEO_DISCOUNT_SOCIAL_REEL_IDS.has(social.id)) items.push({ id: social.id, price: social.price });
+
+    return items;
+  }, [luxuryReelOption, realEstateSelections, realEstateSqftTier, socialReelOption]);
+
   const realEstateSubtotal = realEstateBase + realEstateAlaCarteTotal + realEstateEditingTotal;
-  const realEstateVideoDiscount = realEstateHasVideo ? roundCurrency(realEstateSubtotal * VIDEO_ORDER_DISCOUNT_RATE) : 0;
+  const realEstateVideoDiscount = getVideoOrderDiscount(realEstateVideoDiscountItems, realEstateSubtotal);
   const realEstateDiscountCodeRate = getDiscountCodeRate(realEstateDiscountCode);
   const realEstateDiscountCodeAmount = realEstateDiscountCodeRate
     ? roundCurrency(realEstateSubtotal * realEstateDiscountCodeRate)
@@ -2268,7 +2300,8 @@ export function ServicesBookingFlow() {
                   value={landProperty.address}
                   onChange={(value) => setLandProperty({ address: value })}
                   placeholder="Property Address"
-                  className={`mt-5 w-full ${FORM_INPUT_BASE}`}
+                  className={`w-full ${FORM_INPUT_BASE}`}
+                  containerClassName="mt-5"
                 />
               </SectionShell>
             )}
@@ -2539,7 +2572,8 @@ export function ServicesBookingFlow() {
                         value={realEstateProperty.address}
                         onChange={(value) => setRealEstateProperty((prev) => ({ ...prev, address: value }))}
                         placeholder="Property Address"
-                        className={`sm:col-span-2 w-full ${FORM_INPUT_BASE}`}
+                        className={`w-full ${FORM_INPUT_BASE}`}
+                        containerClassName="sm:col-span-2"
                       />
                       <select
                         value={realEstateProperty.sqft}
@@ -2720,6 +2754,7 @@ export function ServicesBookingFlow() {
                   <div className="mt-5 space-y-6">
                     <div>
                       <p className="text-[#1F2D5A] font-semibold">Video</p>
+                      <p className="mt-1 text-[12px] leading-5 text-[#1f7a4d] font-semibold">{VIDEO_ORDER_DISCOUNT_NOTE}</p>
                       <div className="mt-3 grid md:grid-cols-2 gap-3">
                         <div className={`px-4 py-3 ${CARD_BASE}`}>
                           <p className="text-[#1F2D5A] text-[14px] font-semibold">30sec Highlight Reel</p>
@@ -2786,10 +2821,15 @@ export function ServicesBookingFlow() {
                       <p className="text-[#1F2D5A] font-semibold">Photography</p>
                       <div className="mt-3 grid md:grid-cols-2 gap-3">
                         {REAL_ESTATE_PHOTO_ITEMS.map((item) => (
-                          <label key={item.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${CARD_BASE}`}>
-                            <span className="flex items-center gap-2">
-                              <input type="checkbox" checked={realEstateSelections.includes(item.id)} onChange={() => toggleSelection(item.id, setRealEstateSelections)} />
-                              {item.label}
+                          <label key={item.id} className={`flex items-start justify-between gap-3 px-4 py-3 ${CARD_BASE}`}>
+                            <span className="flex items-start gap-2">
+                              <input type="checkbox" className="mt-1" checked={realEstateSelections.includes(item.id)} onChange={() => toggleSelection(item.id, setRealEstateSelections)} />
+                              <span>
+                                <span className="block">{item.label}</span>
+                                {"description" in item && item.description ? (
+                                  <span className="mt-1 block text-[12px] leading-5 text-[#6b768c]">{item.description}</span>
+                                ) : null}
+                              </span>
                             </span>
                             <span className="font-semibold text-[#1F2D5A]">
                               {item.pricingType === "flat"
@@ -3070,8 +3110,8 @@ export function ServicesBookingFlow() {
                         <input
                           value={realEstateDiscountCode}
                           onChange={(e) => setRealEstateDiscountCode(e.target.value)}
-                          placeholder="Enter discount code"
-                          className={`${FORM_INPUT_BASE} mt-1 w-full h-10 rounded-[12px]`}
+                          placeholder="If applicable, apply discount code here"
+                          className={`${FORM_INPUT_BASE} mt-1 w-full`}
                         />
                         {realEstateDiscountCode.trim() && !realEstateDiscountCodeRate ? (
                           <p className="mt-1 text-[12px] text-[#c84848]">Code not recognized.</p>
@@ -3156,6 +3196,32 @@ export function ServicesBookingFlow() {
                       }))
                     }
                   />
+                </div>
+                <div className="mt-6 pt-5 border-t border-[#e4e6ef] text-[14px] text-[#51607b]">
+                  <p className="text-[#1F2D5A] font-semibold">Order total</p>
+                  <div className="mt-3 space-y-1">
+                    <div className="flex justify-between gap-4">
+                      <span>Subtotal</span>
+                      <span className="font-semibold">{currency(realEstateSubtotal)}</span>
+                    </div>
+                    {realEstateVideoDiscount > 0 ? (
+                      <div className="flex justify-between gap-4 text-[#1f7a4d]">
+                        <span>10% video order discount</span>
+                        <span className="font-semibold">{currency(-realEstateVideoDiscount)}</span>
+                      </div>
+                    ) : null}
+                    {realEstateDiscountCodeAmount > 0 ? (
+                      <div className="flex justify-between gap-4 text-[#1f7a4d]">
+                        <span>Discount code ({realEstateDiscountCode.trim()})</span>
+                        <span className="font-semibold">{currency(-realEstateDiscountCodeAmount)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between gap-4 pt-2 mt-2 border-t border-[#e4e6ef] text-[#1F2D5A] text-[16px]">
+                      <span className="font-semibold">Total due</span>
+                      <span className="font-semibold">{currency(realEstateTotal)}</span>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[12px] text-[#6b768c]">Your invoice will be sent for this total.</p>
                 </div>
               </SectionShell>
             )}

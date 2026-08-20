@@ -21,7 +21,7 @@ export const PRICING_SHEET = {
   packages: [
     {
       name: "Standard Package",
-      description: "Listing + aerial photos + floorplan",
+      description: "Listing + drone photos + floorplan",
       prices: {
         "0-1499": 279,
         "1500-2499": 349,
@@ -32,7 +32,7 @@ export const PRICING_SHEET = {
     },
     {
       name: "Zillow Showcase Package",
-      description: "Listing + aerial photos + Zillow showcase + 1 virtual twilight",
+      description: "Listing + drone photos + Zillow 3D Tour + 1 virtual twilight",
       prices: {
         "0-1499": 399,
         "1500-2499": 479,
@@ -42,7 +42,7 @@ export const PRICING_SHEET = {
     },
     {
       name: "Luxury Package",
-      description: "Listing + aerial photos + Zillow showcase + 2 virtual twilights + 45–60sec Luxury Reel",
+      description: "Listing + drone photos + Zillow 3D Tour + 2 virtual twilights + 45–60sec Luxury Reel",
       prices: {
         "0-1499": 979,
         "1500-2499": 1059,
