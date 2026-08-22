@@ -6,6 +6,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "audit:homegrown": "node scripts/homegrown-health-check.mjs",
+    "test:homegrown": "node scripts/test-homegrown-preflight.mjs",
     "sync:portfolio:supabase": "node scripts/sync-portfolio-to-supabase.mjs"
   },
   "dependencies": {
