@@ -36,6 +36,16 @@ function getContact(payload) {
   };
 }
 
+function getPropertyAddress(payload) {
+  const property = payload?.property && typeof payload.property === "object" ? payload.property : {};
+  return asString(payload.property_address) || asString(property.address);
+}
+
+function isDryRun(req, payload) {
+  const url = new URL(req.url || "/", "https://homegrownvisualsmedia.com");
+  return url.searchParams.get("dry_run") === "1" || payload?.dry_run === true;
+}
+
 function json(res, statusCode, body) {
   res.statusCode = statusCode;
   res.setHeader("Content-Type", "application/json");
@@ -72,13 +82,28 @@ export default async function handler(req, res) {
     return json(res, 400, { ok: false, error: "Invalid JSON body" });
   }
   const contact = getContact(payload);
-  const propertyAddress = asString(payload.property_address);
+  const propertyAddress = getPropertyAddress(payload);
 
   if (!contact.email && !contact.phone) {
     return json(res, 400, { ok: false, error: "Missing contact email or phone" });
   }
   if (!propertyAddress) {
     return json(res, 400, { ok: false, error: "Missing property address" });
+  }
+
+  if (isDryRun(req, payload)) {
+    return json(res, 200, {
+      ok: true,
+      dryRun: true,
+      locationId,
+      parsed: {
+        contact: {
+          hasEmail: Boolean(contact.email),
+          hasPhone: Boolean(contact.phone),
+        },
+        hasPropertyAddress: Boolean(propertyAddress),
+      },
+    });
   }
 
   const customFields = [
