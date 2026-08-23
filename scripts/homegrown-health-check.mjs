@@ -39,6 +39,33 @@ const stageNames = {
   "c5bef0b3-314a-4004-b865-771d63adafa1": "Review Requested",
 };
 
+const criticalWorkflows = [
+  {
+    id: "dd719c59-fe36-4566-947c-bea82b30ffb0",
+    name: "1. Appointments Confirmation Request (Internal)",
+  },
+  {
+    id: "f47e1aff-9ba6-4782-bc5e-1045898d3b6b",
+    name: "2. Appointments Confirmed",
+  },
+  {
+    id: "cbf6ee5e-b948-4816-b4c9-0d14622d7605",
+    name: "2.B Appointments Confirmed Reminder",
+  },
+  {
+    id: "dea2b23d-21eb-4f75-922b-73339ecf82c7",
+    name: "Assign Opportunity on Meeting",
+  },
+  {
+    id: "20c3d3bf-1fb2-4c80-a201-2a52ac02a5bb",
+    name: "Booking Confirmed - Triggering Invoice",
+  },
+  {
+    id: "54a69575-59ad-431c-8948-27d9fb94b357",
+    name: "Appointment Cancelled - Stop Reminders",
+  },
+];
+
 function loadEnvFile(filePath) {
   if (!existsSync(filePath)) return;
   const text = readFileSync(filePath, "utf8");
@@ -219,6 +246,45 @@ async function getCalendars() {
   return (await ghlGet(`/calendars/?locationId=${locationId}`)).calendars || [];
 }
 
+async function getWorkflows() {
+  return (await ghlGet(`/workflows/?locationId=${locationId}`)).workflows || [];
+}
+
+function checkCriticalWorkflows(workflows) {
+  const byId = new Map(workflows.map((workflow) => [workflow.id, workflow]));
+  const byName = new Map(workflows.map((workflow) => [workflow.name, workflow]));
+  const rows = [];
+  const issues = [];
+
+  for (const expected of criticalWorkflows) {
+    const workflow = byId.get(expected.id) || byName.get(expected.name) || null;
+    const row = {
+      expectedName: expected.name,
+      expectedId: expected.id,
+      id: workflow?.id || null,
+      name: workflow?.name || null,
+      status: workflow?.status || "missing",
+      version: workflow?.version ?? null,
+      updatedAt: workflow?.updatedAt || null,
+      createdAt: workflow?.createdAt || null,
+    };
+
+    if (!workflow) {
+      issues.push(`Critical workflow missing: ${expected.name}`);
+    } else if (workflow.status !== "published") {
+      issues.push(`Critical workflow is ${workflow.status}: ${workflow.name}`);
+    }
+
+    if (workflow && workflow.id !== expected.id) {
+      issues.push(`Critical workflow ID changed for ${expected.name}: expected ${expected.id}, found ${workflow.id}`);
+    }
+
+    rows.push(row);
+  }
+
+  return { checked: rows, issues };
+}
+
 async function getFutureEvents(calendars) {
   const startTime = Date.now() - 12 * 60 * 60 * 1000;
   const endTime = Date.now() + 45 * 24 * 60 * 60 * 1000;
@@ -384,6 +450,7 @@ function summarize(report) {
   if (report.locationSettings?.allowDuplicateOpportunity) {
     issues.push("GHL location allows duplicate opportunities; duplicate-opportunity guard must stay active");
   }
+  for (const issue of report.criticalWorkflows?.issues || []) issues.push(issue);
   for (const issue of report.calendarRouting?.issues || []) issues.push(issue);
   for (const booking of report.futureBookings) {
     for (const risk of booking.risks) issues.push(`${booking.contact.name || booking.contact.email}: ${risk}`);
@@ -429,6 +496,7 @@ function renderMarkdown(report, jsonPath) {
     }`,
     `- GHL duplicate opportunities allowed: ${report.locationSettings?.allowDuplicateOpportunity ?? "unknown"}`,
     `- Website calendar routes checked: ${report.calendarRouting?.checked?.length ?? 0}`,
+    `- Critical workflows checked: ${report.criticalWorkflows?.checked?.length ?? 0}`,
     `- Future appointments checked: ${report.futureBookings.length}`,
     `- Recent confirmation messages checked: ${report.recentConfirmations.length}`,
     "",
@@ -469,6 +537,17 @@ function renderMarkdown(report, jsonPath) {
     lines.push("- Not checked.");
   }
 
+  lines.push("", "## Critical Workflows", "");
+  if (report.criticalWorkflows?.checked?.length) {
+    for (const workflow of report.criticalWorkflows.checked) {
+      lines.push(
+        `- ${workflow.expectedName}: ${workflow.status} | version ${workflow.version ?? "unknown"} | updated ${workflow.updatedAt || "unknown"}`,
+      );
+    }
+  } else {
+    lines.push("- Not checked.");
+  }
+
   const messageProblems = report.recentConfirmations.filter(
     (message) => message.blankTime || message.status === "undelivered",
   );
@@ -504,6 +583,7 @@ async function main() {
     website: await checkWebsite(),
     dns: await checkDns(),
     locationSettings: null,
+    criticalWorkflows: null,
     calendarRouting: null,
     futureBookings: [],
     recentConfirmations: [],
@@ -512,6 +592,7 @@ async function main() {
 
   if (ghlToken) {
     report.locationSettings = await checkLocationSettings();
+    report.criticalWorkflows = checkCriticalWorkflows(await getWorkflows());
     const calendars = await getCalendars();
     report.calendarRouting = checkCalendarRouting(calendars);
     report.futureBookings = await checkFutureBookings(calendars);
