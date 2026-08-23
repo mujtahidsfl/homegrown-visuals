@@ -396,9 +396,21 @@ async function checkRecentConfirmations() {
     (conversation) => Number(conversation.lastMessageDate || 0) >= since || Number(conversation.dateUpdated || 0) >= since,
   );
   const confirmations = [];
+  const errors = [];
 
   for (const conversation of recent) {
-    const body = await ghlGet(`/conversations/${conversation.id}/messages?limit=50`);
+    let body;
+    try {
+      body = await ghlGet(`/conversations/${conversation.id}/messages?limit=50`);
+    } catch (error) {
+      errors.push({
+        conversationId: conversation.id,
+        contactId: conversation.contactId || null,
+        error: String(error?.message || error).slice(0, 500),
+      });
+      continue;
+    }
+
     for (const message of body.messages?.messages || []) {
       const messageBody = String(message.body || "");
       const messageTime = Date.parse(message.dateAdded || "");
@@ -422,7 +434,7 @@ async function checkRecentConfirmations() {
   }
 
   confirmations.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-  return confirmations;
+  return { confirmations, errors };
 }
 
 async function checkLocationSettings() {
@@ -458,6 +470,9 @@ function summarize(report) {
   for (const message of report.recentConfirmations) {
     if (message.blankTime) issues.push(`Blank date/time confirmation message: ${message.contactId} ${message.messageId}`);
     if (message.status === "undelivered") issues.push(`Undelivered confirmation ${message.type}: ${message.error || message.contactId}`);
+  }
+  if (report.recentConfirmationErrors?.length) {
+    issues.push(`GHL conversation audit skipped ${report.recentConfirmationErrors.length} conversation(s) due to GHL API errors`);
   }
   return issues;
 }
@@ -499,6 +514,7 @@ function renderMarkdown(report, jsonPath) {
     `- Critical workflows checked: ${report.criticalWorkflows?.checked?.length ?? 0}`,
     `- Future appointments checked: ${report.futureBookings.length}`,
     `- Recent confirmation messages checked: ${report.recentConfirmations.length}`,
+    `- Recent conversation fetch errors: ${report.recentConfirmationErrors?.length ?? 0}`,
     "",
     "## Issues",
     "",
@@ -564,6 +580,15 @@ function renderMarkdown(report, jsonPath) {
     lines.push("- None found.");
   }
 
+  lines.push("", "## Conversation Audit Fetch Errors", "");
+  if (report.recentConfirmationErrors?.length) {
+    for (const error of report.recentConfirmationErrors) {
+      lines.push(`- conversation=${error.conversationId} contact=${error.contactId || "unknown"}: ${error.error}`);
+    }
+  } else {
+    lines.push("- None found.");
+  }
+
   lines.push("", "## DNS", "");
   lines.push(`- mg SPF: ${flattenTxt(report.dns.mgSpf)}`);
   lines.push(`- mg DKIM: ${report.dns.mgDkim.length ? "present" : "missing"}`);
@@ -587,6 +612,7 @@ async function main() {
     calendarRouting: null,
     futureBookings: [],
     recentConfirmations: [],
+    recentConfirmationErrors: [],
     issues: [],
   };
 
@@ -596,7 +622,9 @@ async function main() {
     const calendars = await getCalendars();
     report.calendarRouting = checkCalendarRouting(calendars);
     report.futureBookings = await checkFutureBookings(calendars);
-    report.recentConfirmations = await checkRecentConfirmations();
+    const recentConfirmationCheck = await checkRecentConfirmations();
+    report.recentConfirmations = recentConfirmationCheck.confirmations;
+    report.recentConfirmationErrors = recentConfirmationCheck.errors;
   } else {
     report.issues.push("Missing GHL token locally; skipped GHL checks");
   }
