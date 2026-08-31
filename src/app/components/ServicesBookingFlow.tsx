@@ -17,6 +17,7 @@ import {
   type SqftTierKey,
 } from "../booking/config";
 import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
+import { usesBookingOrchestrator } from "../booking/submission";
 import {
   VIDEO_ORDER_DISCOUNT_NOTE,
   VIDEO_ORDER_DISCOUNT_RATE,
@@ -887,11 +888,22 @@ export function ServicesBookingFlow() {
 
   useEffect(() => {
     if (servicesDraftRestoredRef.current) return;
-    if (serviceType) return;
 
     const params = new URLSearchParams(location.search);
     const serviceParam = params.get("service")?.toLowerCase();
-    if (!serviceParam) return;
+    const packageParam = params.get("package")?.toLowerCase();
+    const packageKey =
+      packageParam === "standard" ||
+      packageParam === "zillow_showcase" ||
+      packageParam === "luxury"
+        ? packageParam
+        : null;
+
+    if (packageKey && !realEstatePackage) {
+      setRealEstatePackage(packageKey);
+    }
+
+    if (serviceType || !serviceParam) return;
 
     if (serviceParam === "social-media" || serviceParam === "social_media" || serviceParam === "social") {
       setServiceType(ServiceType.SOCIAL_MEDIA);
@@ -906,7 +918,7 @@ export function ServicesBookingFlow() {
     if (serviceParam === "vacant-land" || serviceParam === "vacant_land" || serviceParam === "land") {
       setServiceType(ServiceType.VACANT_LAND);
     }
-  }, [location.search, serviceType]);
+  }, [location.search, realEstatePackage, serviceType]);
 
   const realEstateSqftValue = useMemo(() => toSqftNumber(realEstateProperty.sqft), [realEstateProperty.sqft]);
   const realEstateSqftTier = useMemo(() => getSqftTierKey(realEstateSqftValue), [realEstateSqftValue]);
@@ -1708,6 +1720,28 @@ export function ServicesBookingFlow() {
   const submitBooking = async (payload: Record<string, unknown>, webhookUrl: string, setError: (message: string | null) => void, setSubmitting: (value: boolean) => void) => {
     setSubmitting(true);
     setError(null);
+
+    if (usesBookingOrchestrator) {
+      try {
+        const response = await fetch("/api/hgv-bookings", {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || `Booking API failed with status ${response.status}`);
+        }
+        return true;
+      } catch {
+        setError("We couldn't submit the booking right now. Please try again. Your details are saved on this device.");
+        return false;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
     try {
       await submitGhlBookingPreflight(payload);
     } catch {
