@@ -135,6 +135,14 @@ const ambiguous = await ledger.claimAppointment({
 });
 assert.equal(ambiguous, null, "multiple pending repeat-client jobs must never be guessed");
 
+const addressMatched = await ledger.claimAppointment({
+  id: "appointment-address-matched",
+  contactId: "contact-repeat",
+  calendarId: "calendar-a",
+  title: "Repeat Client | 456 New Job Blvd",
+});
+assert.equal(addressMatched.booking_id, "booking-b", "the appointment address must select the correct repeat-client job");
+
 await ledger.updateAppointment("booking-a", {
   id: "appointment-a",
   calendarId: "calendar-a",
@@ -142,12 +150,13 @@ await ledger.updateAppointment("booking-a", {
   startTime: "2026-09-10T09:00:00-05:00",
   endTime: "2026-09-10T11:00:00-05:00",
 }, "scheduled");
-const appointment = await ledger.claimAppointment({
-  id: "appointment-b",
-  contactId: "contact-repeat",
+await ledger.updateAppointment("booking-b", {
+  id: "appointment-address-matched",
   calendarId: "calendar-a",
-});
-assert.equal(appointment.booking_id, "booking-b");
+  assignedUserId: "brayden-user",
+  startTime: "2026-09-11T09:00:00-05:00",
+  endTime: "2026-09-11T11:00:00-05:00",
+}, "scheduled");
 
 const invoiceClaim = await ledger.claimInvoice("booking-b", "invoice-request-1");
 const invoiceDuplicate = await ledger.claimInvoice("booking-b", "invoice-request-2");

@@ -141,6 +141,8 @@ export function normalizeAppointmentWebhook(payload) {
     type,
     id,
     contactId,
+    title: asString(appointment.title) || asString(source.title),
+    address: asString(appointment.address) || asString(source.address),
     calendarId: asString(appointment.calendarId) || asString(source.calendarId),
     assignedUserId: asString(appointment.assignedUserId) || asString(source.assignedUserId),
     status: asString(appointment.appointmentStatus) || asString(source.appointmentStatus),

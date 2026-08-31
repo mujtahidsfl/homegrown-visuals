@@ -207,6 +207,36 @@ function selectedTeamMembers(calendar) {
   return (calendar.teamMembers || []).filter((member) => member.selected !== false);
 }
 
+function appointmentDisplayValues(event) {
+  const start = event.startTime ? new Date(event.startTime) : null;
+  const end = event.endTime ? new Date(event.endTime) : null;
+  const validStart = start && !Number.isNaN(start.valueOf());
+  const validEnd = end && !Number.isNaN(end.valueOf());
+  const dateFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return {
+    date: validStart ? dateFormatter.format(start) : "",
+    start: validStart ? timeFormatter.format(start) : "",
+    end: validEnd ? timeFormatter.format(end) : "",
+    durationMinutes: validStart && validEnd ? Math.round((end.valueOf() - start.valueOf()) / 60000) : null,
+  };
+}
+
+function expectedCalendarDuration(calendarName) {
+  const match = String(calendarName || "").trim().match(/(\d+)\s*(?:min)?$/i);
+  return match ? Number(match[1]) : null;
+}
+
 function checkCalendarRouting(calendars) {
   const ids = parseCalendarIdsFromSource();
   const byId = new Map(calendars.map((calendar) => [calendar.id, calendar]));
@@ -352,6 +382,30 @@ async function checkFutureBookings(calendars) {
     if (current && !current.fields.websiteBookingId) risks.push("current opportunity missing website booking ID");
     if (current && (!current.fields.meetingDate || !current.fields.meetingStart || !current.fields.meetingEnd)) {
       risks.push("current opportunity missing meeting date/time fields");
+    }
+    if (current?.fields.meetingDate && current?.fields.meetingStart && current?.fields.meetingEnd) {
+      const expected = appointmentDisplayValues(event);
+      const actual = {
+        date: String(current.fields.meetingDate),
+        start: String(current.fields.meetingStart),
+        end: String(current.fields.meetingEnd),
+      };
+      if (actual.date !== expected.date || actual.start !== expected.start || actual.end !== expected.end) {
+        risks.push(
+          `opportunity meeting date/time ${actual.date} ${actual.start}-${actual.end} does not match appointment ${expected.date} ${expected.start}-${expected.end}`,
+        );
+      }
+    }
+    const appointmentValues = appointmentDisplayValues(event);
+    const calendarDuration = expectedCalendarDuration(event.calendarName);
+    if (
+      calendarDuration
+      && appointmentValues.durationMinutes !== null
+      && appointmentValues.durationMinutes !== calendarDuration
+    ) {
+      risks.push(
+        `appointment duration is ${appointmentValues.durationMinutes} minutes on a ${calendarDuration}-minute calendar`,
+      );
     }
     if (current?.stage === "Booking Confirmed") {
       if (!current.fields.paymentLink) risks.push("confirmed opportunity missing Stripe payment link");

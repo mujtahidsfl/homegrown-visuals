@@ -67,6 +67,17 @@ function bookingSnapshot(booking) {
   return snapshot;
 }
 
+function comparableAddress(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function appointmentMatchesAddress(row, appointment) {
+  const bookingAddress = comparableAddress(row.payload?.propertyAddress);
+  if (!bookingAddress) return false;
+  const appointmentText = comparableAddress(`${appointment.title || ""} ${appointment.address || ""}`);
+  return appointmentText.includes(bookingAddress);
+}
+
 function isUniqueBookingConflict(error) {
   return error?.status === 400 && /same value for Website Booking ID/i.test(error.message);
 }
@@ -236,6 +247,12 @@ export function createGhlObjectLedger({
           && row.status === "opportunity_created"
           && (!appointment.calendarId || !row.calendar_id || row.calendar_id === appointment.calendarId),
         );
+        const addressMatches = candidates.filter((row) => appointmentMatchesAddress(row, appointment));
+        if (addressMatches.length === 1) {
+          const row = addressMatches[0];
+          return rowFromRecord(await updateRecord(row.record_id, { appointment_id: appointment.id }));
+        }
+        if (addressMatches.length > 1) return null;
         if (candidates.length > 1) return null;
         if (candidates.length === 1) {
           const row = candidates[0];

@@ -252,6 +252,35 @@ assert.deepEqual(invoiceHarness.invoices[0].booking.lineItems.map((item) => item
 assert.deepEqual(invoiceHarness.invoices[0].booking.lineItems.map((item) => item.amount), [453, -45.3]);
 assert.equal(invoiceHarness.sentInvoices.length, 0, "draft mode must not email, text, or charge the client");
 
+const compactLedgerHarness = makeHarness();
+await compactLedgerHarness.orchestrator.submit(payload("booking-compact-ledger"));
+const compactRow = compactLedgerHarness.rows.get("booking-compact-ledger");
+compactRow.payload = {
+  ...compactRow.payload,
+  bookingId: "booking-compact-ledger",
+  contact: {
+    fullName: "Repeat Client",
+    firstName: "Repeat",
+    lastName: "Client",
+    email: "repeat@example.com",
+    phone: "+15555550100",
+  },
+  packageName: "Standard Package",
+  propertyAddress: "123 Current Job Ave",
+  lineItems: [{ id: "standard", name: "Standard Package", amount: 453, quantity: 1 }],
+};
+const compactInvoice = await compactLedgerHarness.orchestrator.createInvoice({
+  bookingId: "booking-compact-ledger",
+  sendMode: "draft",
+  dueDays: 7,
+});
+assert.equal(compactInvoice.invoiceId, "invoice-1");
+assert.equal(
+  compactLedgerHarness.invoices[0].booking.propertyAddress,
+  "123 Current Job Ave",
+  "the invoice path must consume the compact GHL Booking Job snapshot",
+);
+
 const recoveryHarness = makeHarness();
 await recoveryHarness.orchestrator.submit(payload("booking-recovery"));
 const recoveredBooking = recoveryHarness.rows.get("booking-recovery");
