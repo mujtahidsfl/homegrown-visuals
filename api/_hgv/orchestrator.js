@@ -3,6 +3,12 @@ import { HGV_STAGE_IDS } from "./config.js";
 import { appointmentCustomFields } from "./ghl.js";
 import { normalizeAppointmentWebhook, normalizeBookingPayload } from "./normalize.js";
 
+function bookingFromLedgerPayload(payload) {
+  return payload?.bookingId && payload?.contact && Array.isArray(payload?.lineItems)
+    ? payload
+    : normalizeBookingPayload(payload);
+}
+
 export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = randomUUID } = {}) {
   if (!ledger) throw new Error("Missing booking ledger");
   if (!ghl) throw new Error("Missing GHL client");
@@ -106,7 +112,7 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
       }
 
       try {
-        const booking = normalizeBookingPayload(claim.payload);
+        const booking = bookingFromLedgerPayload(claim.payload);
         let invoice = await ghl.findInvoiceByBookingId(bookingId, claim.contact_id);
         const reconciled = Boolean(invoice);
         if (!invoice) {

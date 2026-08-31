@@ -1,6 +1,6 @@
 import { createGhlClient } from "./_hgv/ghl.js";
 import { readJson, requestUrl, sendJson } from "./_hgv/http.js";
-import { createSupabaseLedger } from "./_hgv/ledger.js";
+import { createGhlObjectLedger } from "./_hgv/ledger.js";
 import { createBookingOrchestrator } from "./_hgv/orchestrator.js";
 
 function providedSecret(req, url) {
@@ -31,12 +31,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const ledger = createSupabaseLedger({
-      url: process.env.HGV_SUPABASE_URL,
-      serviceRoleKey: process.env.HGV_SUPABASE_SERVICE_ROLE_KEY,
+    const token = process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN;
+    const ledger = createGhlObjectLedger({
+      token,
+      locationId: process.env.GHL_LOCATION_ID,
+      schemaKey: process.env.HGV_GHL_BOOKING_OBJECT_KEY || "custom_objects.booking_jobs",
     });
     const ghl = createGhlClient({
-      token: process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN,
+      token,
       locationId: process.env.GHL_LOCATION_ID,
     });
     const result = await createBookingOrchestrator({ ledger, ghl }).syncAppointment(payload);
