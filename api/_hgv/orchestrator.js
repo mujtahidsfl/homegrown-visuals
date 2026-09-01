@@ -43,7 +43,7 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
         await ledger.completeBooking(booking.bookingId, {
           contact_id: contact.id,
           opportunity_id: opportunity.id,
-        });
+        }, claim.record_id);
 
         return {
           ok: true,
@@ -55,7 +55,7 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
           status: "opportunity_created",
         };
       } catch (error) {
-        await ledger.failBooking(booking.bookingId, error?.message || error);
+        await ledger.failBooking(booking.bookingId, error?.message || error, claim.record_id);
         throw error;
       }
     },
@@ -84,7 +84,7 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
         await ghl.updateOpportunity(booking.opportunity_id, opportunityChanges);
       }
       const status = appointment.deleted ? "cancelled" : "scheduled";
-      await ledger.updateAppointment(booking.booking_id, appointment, status);
+      await ledger.updateAppointment(booking.booking_id, appointment, status, booking.record_id);
 
       return {
         ok: true,
@@ -124,10 +124,10 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
           await ghl.sendInvoice(invoice.id, { userId, action: sendMode });
           status = "sent";
         }
-        await ledger.completeInvoice(bookingId, invoice, status);
+        await ledger.completeInvoice(bookingId, invoice, status, claim.record_id);
         return { ok: true, duplicate: false, reconciled, bookingId, invoiceId: invoice.id, status };
       } catch (error) {
-        await ledger.failInvoice(bookingId, error?.message || error);
+        await ledger.failInvoice(bookingId, error?.message || error, claim.record_id);
         throw error;
       }
     },

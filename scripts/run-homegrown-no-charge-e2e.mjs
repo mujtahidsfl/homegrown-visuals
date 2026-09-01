@@ -226,6 +226,12 @@ try {
   if (!cleanup.bookingRecordId) {
     cleanup.bookingRecordId = (await bookingJobRecord(bookingId).catch(() => null))?.id || "";
   }
+  if (!cleanup.invoiceId) {
+    const recoveredInvoice = await createGhlClient({ token, locationId })
+      .findInvoiceByBookingId(bookingId, cleanup.contactId)
+      .catch(() => null);
+    cleanup.invoiceId = recoveredInvoice?.id || "";
+  }
   const cleanupErrors = [];
   const remove = async (label, path, options = {}) => {
     try {

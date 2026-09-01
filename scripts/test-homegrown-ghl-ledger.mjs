@@ -11,6 +11,7 @@ function jsonResponse(status, body) {
 function createFakeGhlObjectsApi() {
   const records = new Map();
   let nextId = 1;
+  let searchEnabled = true;
 
   async function fetchImpl(url, options = {}) {
     const parsedUrl = new URL(url);
@@ -35,7 +36,7 @@ function createFakeGhlObjectsApi() {
 
     if (method === "POST" && path.endsWith("/records/search")) {
       const query = String(body.query || "");
-      const matches = [...records.values()].filter((record) =>
+      const matches = (searchEnabled ? [...records.values()] : []).filter((record) =>
         Object.values(record.properties).some((value) => String(value).includes(query)),
       );
       return jsonResponse(201, { records: matches, total: matches.length });
@@ -54,7 +55,11 @@ function createFakeGhlObjectsApi() {
     return jsonResponse(404, { message: "Not found" });
   }
 
-  return { fetchImpl, records };
+  return {
+    fetchImpl,
+    records,
+    setSearchEnabled(value) { searchEnabled = value; },
+  };
 }
 
 function booking(bookingId, address = "123 Current Job Ave") {
@@ -113,10 +118,12 @@ assert.equal(first.acquired, true);
 assert.equal(first.payload.propertyAddress, "123 Current Job Ave");
 assert.equal("raw" in first.payload, false, "the GHL snapshot must exclude the duplicated raw payload");
 
+api.setSearchEnabled(false);
 await ledger.completeBooking("booking-a", {
   contact_id: "contact-repeat",
   opportunity_id: "opportunity-a",
-});
+}, first.record_id);
+api.setSearchEnabled(true);
 const duplicate = await ledger.claimBooking(booking("booking-a"), "request-2");
 assert.equal(duplicate.acquired, false);
 assert.equal(duplicate.opportunity_id, "opportunity-a");
@@ -162,7 +169,14 @@ const invoiceClaim = await ledger.claimInvoice("booking-b", "invoice-request-1")
 const invoiceDuplicate = await ledger.claimInvoice("booking-b", "invoice-request-2");
 assert.equal(invoiceClaim.acquired, true);
 assert.equal(invoiceDuplicate.acquired, false);
-await ledger.completeInvoice("booking-b", { id: "invoice-b", invoiceNumber: "B-1" }, "draft");
+api.setSearchEnabled(false);
+await ledger.completeInvoice(
+  "booking-b",
+  { id: "invoice-b", invoiceNumber: "B-1" },
+  "draft",
+  invoiceClaim.record_id,
+);
+api.setSearchEnabled(true);
 const completedInvoice = await ledger.claimInvoice("booking-b", "invoice-request-3");
 assert.equal(completedInvoice.acquired, false);
 assert.equal(completedInvoice.invoice_id, "invoice-b");

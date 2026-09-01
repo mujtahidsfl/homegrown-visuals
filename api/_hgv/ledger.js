@@ -167,6 +167,14 @@ export function createGhlObjectLedger({
     return searchExact("website_booking_id", bookingId, options);
   }
 
+  async function bookingRecord(bookingId, recordId, options) {
+    const record = recordId ? await getRecord(recordId) : await findByBookingId(bookingId, options);
+    if (record && String(record.properties?.website_booking_id || "") !== String(bookingId)) {
+      throw new Error("GHL Booking Job record did not match the requested booking id");
+    }
+    return record;
+  }
+
   return {
     async claimBooking(booking, requestId) {
       const leaseExpiresAt = new Date(now() + CLAIM_LEASE_MS).toISOString();
@@ -202,8 +210,8 @@ export function createGhlObjectLedger({
       return { acquired: true, ...rowFromRecord(updated) };
     },
 
-    async completeBooking(bookingId, values) {
-      const record = await findByBookingId(bookingId, { retryIndexing: true });
+    async completeBooking(bookingId, values, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) throw new Error("No GHL Booking Job matched the completed booking");
       return rowFromRecord(await updateRecord(record.id, {
         contact_id: values.contact_id,
@@ -214,8 +222,8 @@ export function createGhlObjectLedger({
       }));
     },
 
-    async failBooking(bookingId, error) {
-      const record = await findByBookingId(bookingId, { retryIndexing: true });
+    async failBooking(bookingId, error, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) return;
       await updateRecord(record.id, {
         status: "failed",
@@ -262,8 +270,8 @@ export function createGhlObjectLedger({
       return null;
     },
 
-    async updateAppointment(bookingId, appointment, status) {
-      const record = await findByBookingId(bookingId);
+    async updateAppointment(bookingId, appointment, status, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) throw new Error("No GHL Booking Job matched the appointment update");
       return rowFromRecord(await updateRecord(record.id, {
         appointment_id: appointment.id,
@@ -292,8 +300,8 @@ export function createGhlObjectLedger({
       return { acquired: true, ...rowFromRecord(updated) };
     },
 
-    async completeInvoice(bookingId, invoice, status) {
-      const record = await findByBookingId(bookingId);
+    async completeInvoice(bookingId, invoice, status, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) throw new Error("No GHL Booking Job matched the completed invoice");
       return rowFromRecord(await updateRecord(record.id, {
         invoice_id: invoice.id,
@@ -305,8 +313,8 @@ export function createGhlObjectLedger({
       }));
     },
 
-    async failInvoice(bookingId, error) {
-      const record = await findByBookingId(bookingId);
+    async failInvoice(bookingId, error, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) return;
       await updateRecord(record.id, {
         invoice_status: "failed",
