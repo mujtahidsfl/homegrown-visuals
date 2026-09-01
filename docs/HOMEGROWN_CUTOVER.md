@@ -9,7 +9,8 @@ This runbook moves website booking intake, exact appointment matching, photograp
 - The migration branch is `codex/hgv-orchestrator-migration`.
 - Three replacement GHL workflows are saved as unpublished drafts.
 - Preview APIs and GHL Booking Jobs passed a guarded end-to-end test with no charge and cleanup.
-- Sixteen GHL calendars named 60-360 minutes still have a 30-minute appointment duration.
+- All eighteen website calendars were verified on September 1, 2026. The sixteen 60-360 minute calendars now use their labeled duration; the two 30-minute calendars remain at 30 minutes.
+- The original pre-change calendar snapshot is stored at `../outputs/homegrown-calendar-backup-2026-09-01T16-10-47-250Z.json` for rollback.
 
 ## Live Make Inventory
 
@@ -39,7 +40,7 @@ Keep these active unless they receive a separate migration and test:
 
 ## Cutover Order
 
-1. Correct and verify the sixteen GHL calendar durations. Existing appointments remain unchanged.
+1. Completed: correct and verify the sixteen GHL calendar durations. Existing appointments were left unchanged.
 2. Add the server-side orchestrator variables to Vercel Production without adding `VITE_HGV_BOOKING_SUBMISSION_MODE` yet.
 3. Merge the migration branch to `main` and wait for a healthy production deployment. The website remains on Make because the frontend flag still defaults to `make`.
 4. Run the guarded no-charge test against the production APIs and clean up the synthetic contact, opportunity, Booking Job, appointment, and draft invoice.
