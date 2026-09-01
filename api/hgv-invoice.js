@@ -28,6 +28,9 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, error: "Invalid JSON body" });
   }
   const bookingId = String(payload.website_booking_id || payload.booking_id || "").trim();
+  if (!bookingId) {
+    return sendJson(res, 400, { ok: false, error: "Missing website booking id" });
+  }
   const sendMode = process.env.HGV_INVOICE_SEND_MODE || "draft";
   if (!["draft", "email", "sms", "sms_and_email"].includes(sendMode)) {
     return sendJson(res, 500, { ok: false, error: "Invalid invoice send mode" });

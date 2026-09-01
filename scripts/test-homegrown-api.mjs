@@ -97,6 +97,15 @@ try {
   assert.equal(disabledInvoice.statusCode, 503);
   assert.equal(disabledInvoice.body.disabled, true);
 
+  process.env.HGV_ORCHESTRATOR_MODE = "live";
+  const missingInvoiceBookingId = await call(invoiceHandler, {
+    body: {},
+    url: "/api/hgv-invoice",
+    headers: { "x-hgv-webhook-secret": "test-webhook-secret" },
+  });
+  assert.equal(missingInvoiceBookingId.statusCode, 400);
+  assert.equal(missingInvoiceBookingId.body.error, "Missing website booking id");
+
   console.log("Homegrown API safety tests passed");
 } finally {
   if (originalMode === undefined) delete process.env.HGV_ORCHESTRATOR_MODE;
