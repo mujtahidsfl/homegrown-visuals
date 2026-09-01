@@ -41,12 +41,20 @@ const stageNames = {
 
 const criticalWorkflows = [
   {
-    id: "dd719c59-fe36-4566-947c-bea82b30ffb0",
-    name: "1. Appointments Confirmation Request (Internal)",
+    id: "acfc1e5f-6cdf-4769-a6e1-72e48e647500",
+    name: "[MIGRATION] Appointment Intake - Exact Booking",
+  },
+  {
+    id: "81104824-8502-4f36-b82c-27ac151251e7",
+    name: "[MIGRATION] Awaiting Confirmation - Exact Owner",
   },
   {
     id: "f47e1aff-9ba6-4782-bc5e-1045898d3b6b",
     name: "2. Appointments Confirmed",
+  },
+  {
+    id: "5c9de72d-4c42-4bb8-a926-04bb4fac6b0f",
+    name: "[MIGRATION] Draft Invoice - Exact Booking",
   },
   {
     id: "cbf6ee5e-b948-4816-b4c9-0d14622d7605",
@@ -55,10 +63,6 @@ const criticalWorkflows = [
   {
     id: "dea2b23d-21eb-4f75-922b-73339ecf82c7",
     name: "Assign Opportunity on Meeting",
-  },
-  {
-    id: "20c3d3bf-1fb2-4c80-a201-2a52ac02a5bb",
-    name: "Booking Confirmed - Triggering Invoice",
   },
   {
     id: "54a69575-59ad-431c-8948-27d9fb94b357",

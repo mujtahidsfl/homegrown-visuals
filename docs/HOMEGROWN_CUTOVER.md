@@ -4,10 +4,12 @@ This runbook moves website booking intake, exact appointment matching, photograp
 
 ## Current State
 
-- Production website and booking intake still use Make.
-- Production is deployed from `main` at `4d5f96c`.
-- The migration branch is `codex/hgv-orchestrator-migration`.
-- Three replacement GHL workflows are saved as unpublished drafts.
+- Production website booking intake uses the idempotent orchestrator.
+- Production is deployed from `main` at `7c11967`.
+- The migration branch was merged from `codex/hgv-orchestrator-migration`.
+- All three replacement GHL workflows are published.
+- The old broad appointment matcher and old automatic invoice webhook are unpublished.
+- The five Make booking-intake scenarios remain available only for the rollback window and should receive no traffic from the current website bundle.
 - Preview APIs and GHL Booking Jobs passed a guarded end-to-end test with no charge and cleanup.
 - All eighteen website calendars were verified on September 1, 2026. The sixteen 60-360 minute calendars now use their labeled duration; the two 30-minute calendars remain at 30 minutes.
 - The original pre-change calendar snapshot is stored at `../outputs/homegrown-calendar-backup-2026-09-01T16-10-47-250Z.json` for rollback.
@@ -41,12 +43,12 @@ Keep these active unless they receive a separate migration and test:
 ## Cutover Order
 
 1. Completed: correct and verify the sixteen GHL calendar durations. Existing appointments were left unchanged.
-2. Add the server-side orchestrator variables to Vercel Production without adding `VITE_HGV_BOOKING_SUBMISSION_MODE` yet.
-3. Merge the migration branch to `main` and wait for a healthy production deployment. The website remains on Make because the frontend flag still defaults to `make`.
-4. Run the guarded no-charge test against the production APIs and clean up the synthetic contact, opportunity, Booking Job, appointment, and draft invoice.
-5. Verify the confirmed-booking workflow has valid client email/SMS and owner email/SMS actions. Disable any blank-recipient action.
-6. Publish the exact appointment, exact-owner, and exact-invoice workflows. Unpublish the old broad appointment-matching and old invoice-trigger workflows in the same change window.
-7. Set Vercel Production `VITE_HGV_BOOKING_SUBMISSION_MODE=orchestrator` and redeploy.
+2. Completed: add the server-side orchestrator variables to Vercel Production without adding `VITE_HGV_BOOKING_SUBMISSION_MODE` yet.
+3. Completed: merge the migration branch to `main` and wait for a healthy production deployment while the website remains on Make.
+4. Completed: run the guarded no-charge production API test and clean up every synthetic record and draft invoice.
+5. Completed: verify the confirmed-booking workflow has valid client email/SMS and owner email/SMS actions and disable the blank-recipient action.
+6. Completed: publish the exact appointment, exact-owner, and exact-invoice workflows and unpublish the two replaced broad workflows.
+7. Completed: set Vercel Production `VITE_HGV_BOOKING_SUBMISSION_MODE=orchestrator` and redeploy.
 8. Submit one controlled no-charge website booking, schedule it, verify exact opportunity ownership, notifications, and draft invoice, then clean up.
 9. Leave the five Make intake scenarios active but dormant for one browser-cache window. Confirm they receive no new executions from the new bundle, then pause them. Do not delete them during the rollback window.
 10. Run the health check and record the final evidence.
