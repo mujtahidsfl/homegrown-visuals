@@ -34,4 +34,8 @@ export const OPPORTUNITY_FIELD_IDS = {
   invoiceLineItemsStripe: "slKug5Qij1s4OAWFwZH0",
 };
 
+export const CONTACT_FIELD_IDS = {
+  propertyAddress: "T0TQLD2tWm1GgwhCmCfr",
+};
+
 export const HGV_TIME_ZONE = "America/Chicago";

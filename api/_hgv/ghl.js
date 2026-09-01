@@ -1,4 +1,5 @@
 import {
+  CONTACT_FIELD_IDS,
   HGV_LOCATION_ID,
   HGV_PIPELINE_ID,
   HGV_TIME_ZONE,
@@ -103,7 +104,7 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
   }
 
   return {
-    async upsertContact(contact) {
+    async upsertContact(contact, { propertyAddress = "" } = {}) {
       const body = await request("/contacts/upsert", {
         method: "POST",
         version: "2021-07-28",
@@ -114,6 +115,15 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
           lastName: contact.lastName,
           email: contact.email,
           phone: contact.phone,
+          ...(propertyAddress
+            ? {
+                customFields: [{
+                  id: CONTACT_FIELD_IDS.propertyAddress,
+                  key: "contact.property_address",
+                  field_value: propertyAddress,
+                }],
+              }
+            : {}),
           source: "Homegrown Visuals Website",
         },
       });

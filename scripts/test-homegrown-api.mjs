@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import bookingHandler from "../api/hgv-bookings.js";
+import bookingHandler, { submitWithSettling } from "../api/hgv-bookings.js";
 import appointmentHandler from "../api/hgv-ghl-webhook.js";
 import invoiceHandler from "../api/hgv-invoice.js";
 
@@ -64,6 +64,20 @@ try {
   assert.equal(dryRun.body.dryRun, true);
   assert.equal(dryRun.body.parsed.hasPropertyAddress, true);
   assert.equal(dryRun.body.parsed.lineItemCount, 1);
+
+  const settlingStates = [
+    { ok: true, duplicate: true, bookingId: "settling-test", opportunityId: null },
+    { ok: true, duplicate: true, bookingId: "settling-test", opportunityId: null },
+    { ok: true, duplicate: true, bookingId: "settling-test", opportunityId: "opportunity-settled" },
+  ];
+  let settlingCalls = 0;
+  const settled = await submitWithSettling(
+    { async submit() { settlingCalls += 1; return settlingStates.shift(); } },
+    bookingPayload,
+    { sleep: async () => {} },
+  );
+  assert.equal(settled.opportunityId, "opportunity-settled");
+  assert.equal(settlingCalls, 3);
 
   const disabledBooking = await call(bookingHandler, { body: bookingPayload, url: "/api/hgv-bookings" });
   assert.equal(disabledBooking.statusCode, 503);

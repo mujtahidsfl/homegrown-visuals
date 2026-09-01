@@ -4,6 +4,20 @@ import { createGhlObjectLedger } from "./_hgv/ledger.js";
 import { normalizeBookingPayload } from "./_hgv/normalize.js";
 import { createBookingOrchestrator } from "./_hgv/orchestrator.js";
 
+const SETTLE_DELAYS_MS = [250, 500, 1000, 2000];
+
+export async function submitWithSettling(orchestrator, payload, {
+  sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+} = {}) {
+  let result = await orchestrator.submit(payload);
+  for (const delay of SETTLE_DELAYS_MS) {
+    if (!result.duplicate || result.opportunityId) break;
+    await sleep(delay);
+    result = await orchestrator.submit(payload);
+  }
+  return result;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -55,8 +69,16 @@ export default async function handler(req, res) {
       token,
       locationId: process.env.GHL_LOCATION_ID,
     });
-    const result = await createBookingOrchestrator({ ledger, ghl }).submit(payload);
-    return sendJson(res, result.duplicate && !result.opportunityId ? 202 : 200, result);
+    const result = await submitWithSettling(createBookingOrchestrator({ ledger, ghl }), payload);
+    if (result.duplicate && !result.opportunityId) {
+      return sendJson(res, 503, {
+        ok: false,
+        pending: true,
+        bookingId: result.bookingId,
+        error: "Booking is still being synchronized with the CRM",
+      });
+    }
+    return sendJson(res, 200, result);
   } catch (error) {
     console.error("Homegrown booking orchestration failed", { message: error.message });
     return sendJson(res, 502, { ok: false, error: "Booking could not be synchronized with the CRM" });

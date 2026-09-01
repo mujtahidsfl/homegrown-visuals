@@ -32,7 +32,7 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
       }
 
       try {
-        const contact = await ghl.upsertContact(booking.contact);
+        const contact = await ghl.upsertContact(booking.contact, { propertyAddress: booking.propertyAddress });
         let opportunity = await ghl.findOpportunityByBookingId(contact.id, booking.bookingId);
         let reconciled = true;
         if (!opportunity) {

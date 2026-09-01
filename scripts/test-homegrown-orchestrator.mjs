@@ -33,6 +33,7 @@ function makeHarness() {
   const updates = [];
   const invoices = [];
   const sentInvoices = [];
+  const contactUpserts = [];
   let createCount = 0;
 
   const ledger = {
@@ -85,7 +86,8 @@ function makeHarness() {
   };
 
   const ghl = {
-    async upsertContact() {
+    async upsertContact(contact, options) {
+      contactUpserts.push({ contact, options });
       return { id: "contact-repeat" };
     },
     async findOpportunityByBookingId(_contactId, bookingId) {
@@ -126,6 +128,7 @@ function makeHarness() {
     updates,
     invoices,
     sentInvoices,
+    contactUpserts,
     get createCount() { return createCount; },
     orchestrator: createBookingOrchestrator({ ledger, ghl, requestIdFactory: () => "00000000-0000-4000-8000-000000000001" }),
   };
@@ -135,6 +138,7 @@ const harness = makeHarness();
 const first = await harness.orchestrator.submit(payload("booking-a"));
 const retry = await harness.orchestrator.submit(payload("booking-a"));
 assert.equal(first.opportunityId, "opportunity-1");
+assert.equal(harness.contactUpserts[0].options.propertyAddress, "123 Current Job Ave");
 assert.equal(retry.opportunityId, "opportunity-1");
 assert.equal(retry.duplicate, true);
 assert.equal(harness.createCount, 1, "same booking id must create exactly one opportunity");

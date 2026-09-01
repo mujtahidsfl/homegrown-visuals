@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createGhlClient } from "../api/_hgv/ghl.js";
 import { createGhlObjectLedger } from "../api/_hgv/ledger.js";
 import { createBookingOrchestrator } from "../api/_hgv/orchestrator.js";
-import { HGV_LOCATION_ID, HGV_STAGE_IDS, OPPORTUNITY_FIELD_IDS } from "../api/_hgv/config.js";
+import { CONTACT_FIELD_IDS, HGV_LOCATION_ID, HGV_STAGE_IDS, OPPORTUNITY_FIELD_IDS } from "../api/_hgv/config.js";
 
 const BASE_URL = "https://services.leadconnectorhq.com";
 const BOOKING_OBJECT_KEY = process.env.HGV_GHL_BOOKING_OBJECT_KEY || "custom_objects.booking_jobs";
@@ -99,7 +99,7 @@ try {
     lastName: "No Charge Test",
     email: contactEmail,
     phone: "",
-  });
+  }, { propertyAddress });
   cleanup.contactId = contact.id;
 
   await request(`/contacts/${contact.id}`, {
@@ -109,6 +109,13 @@ try {
   });
   const protectedContact = (await request(`/contacts/${contact.id}`, { version: "2021-07-28" })).contact || {};
   assert.equal(protectedContact.dnd, true, "synthetic contact must be do-not-contact before opportunity creation");
+  const contactFields = new Map(
+    (protectedContact.customFields || []).map((field) => [
+      field.id,
+      field.fieldValueString ?? field.fieldValue ?? field.value ?? "",
+    ]),
+  );
+  assert.equal(contactFields.get(CONTACT_FIELD_IDS.propertyAddress), propertyAddress);
 
   const payload = {
     form_type: "booking",
@@ -210,6 +217,7 @@ try {
     duplicateInvoiceSuppressed: true,
     previewApiVerified: Boolean(E2E_BASE_URL),
     appointmentReconciliationVerified: Boolean(E2E_BASE_URL),
+    calendarPrefillAddressVerified: true,
     opportunityFieldsVerified: true,
     invoiceItemizationVerified: true,
     invoiceAddressVerified: true,
