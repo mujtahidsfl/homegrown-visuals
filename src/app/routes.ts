@@ -10,6 +10,12 @@ import { PricingPage } from "./components/PricingPage";
 import { AboutPage } from "./components/AboutPage";
 import { AppShell } from "./components/AppShell";
 import { CalendarTestPage } from "./components/CalendarTestPage";
+import { packageServicesRoute, usesBookingOrchestrator } from "./booking/submission";
+
+const packageBookingElement = (packageKey: "standard" | "zillow_showcase" | "luxury") =>
+  usesBookingOrchestrator
+    ? createElement(Navigate, { to: packageServicesRoute(packageKey), replace: true })
+    : createElement(BookingFormPage, { packageKey });
 
 export const router = createBrowserRouter([
   {
@@ -22,15 +28,15 @@ export const router = createBrowserRouter([
       },
       {
         path: "book/standard",
-        element: createElement(BookingFormPage, { packageKey: "standard" }),
+        element: packageBookingElement("standard"),
       },
       {
         path: "book/zillow-showcase",
-        element: createElement(BookingFormPage, { packageKey: "zillow_showcase" }),
+        element: packageBookingElement("zillow_showcase"),
       },
       {
         path: "book/luxury",
-        element: createElement(BookingFormPage, { packageKey: "luxury" }),
+        element: packageBookingElement("luxury"),
       },
       {
         path: "confirmation",

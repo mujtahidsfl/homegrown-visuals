@@ -7,7 +7,12 @@
     "build": "vite build",
     "dev": "vite",
     "audit:homegrown": "node scripts/homegrown-health-check.mjs",
+    "fix:homegrown:calendars": "node scripts/fix-homegrown-calendar-durations.mjs",
     "test:homegrown": "node scripts/test-homegrown-preflight.mjs",
+    "test:homegrown:api": "node scripts/test-homegrown-api.mjs",
+    "test:homegrown:orchestrator": "node scripts/test-homegrown-orchestrator.mjs",
+    "test:homegrown:ledger": "node scripts/test-homegrown-ghl-ledger.mjs",
+    "test:homegrown:e2e:no-charge": "node scripts/run-homegrown-no-charge-e2e.mjs",
     "sync:portfolio:supabase": "node scripts/sync-portfolio-to-supabase.mjs"
   },
   "dependencies": {

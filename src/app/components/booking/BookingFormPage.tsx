@@ -26,6 +26,7 @@ import {
   type PackageKey,
   type SqftTierKey,
 } from "../../booking/config";
+import { usesBookingOrchestrator } from "../../booking/submission";
 
 type BookingFormPageProps = {
   packageKey: PackageKey;
@@ -559,8 +560,22 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
       setSubmitting(true);
       setError(null);
       payload = buildPayload();
-      await submitGhlBookingPreflight(payload);
-      preflightComplete = true;
+
+      if (usesBookingOrchestrator) {
+        const response = await fetch("/api/hgv-bookings", {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || `Booking API failed with status ${response.status}`);
+        }
+      } else {
+        await submitGhlBookingPreflight(payload);
+        preflightComplete = true;
+      }
 
       sendBackupEmailFromPayload(payload, {
         source: "package_booking_form",
@@ -568,14 +583,16 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
       });
       sendGoogleSheetsFromPayload(payload, "package_booking_form");
 
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        keepalive: true,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        throw new Error(`Webhook failed with status ${response.status}`);
+      if (!usesBookingOrchestrator) {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(`Webhook failed with status ${response.status}`);
+        }
       }
 
       submissionFinalizedRef.current = true;
@@ -594,6 +611,11 @@ export function BookingFormPage({ packageKey }: BookingFormPageProps) {
 
       navigate("/confirmation");
     } catch (e) {
+      if (usesBookingOrchestrator) {
+        setError("We couldn't submit the booking right now. Please try again. Your details are saved on this device.");
+        return;
+      }
+
       if (!preflightComplete || !payload) {
         setError("We couldn't prepare the booking details in the CRM right now. Please try again.");
         return;
