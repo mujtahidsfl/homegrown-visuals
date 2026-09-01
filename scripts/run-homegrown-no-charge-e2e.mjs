@@ -5,10 +5,11 @@ import { randomUUID } from "node:crypto";
 import { createGhlClient } from "../api/_hgv/ghl.js";
 import { createGhlObjectLedger } from "../api/_hgv/ledger.js";
 import { createBookingOrchestrator } from "../api/_hgv/orchestrator.js";
-import { HGV_LOCATION_ID, OPPORTUNITY_FIELD_IDS } from "../api/_hgv/config.js";
+import { HGV_LOCATION_ID, HGV_STAGE_IDS, OPPORTUNITY_FIELD_IDS } from "../api/_hgv/config.js";
 
 const BASE_URL = "https://services.leadconnectorhq.com";
 const BOOKING_OBJECT_KEY = process.env.HGV_GHL_BOOKING_OBJECT_KEY || "custom_objects.booking_jobs";
+const E2E_BASE_URL = String(process.env.HGV_E2E_BASE_URL || "").replace(/\/$/, "");
 
 function loadEnv(filePath) {
   if (!existsSync(filePath)) return;
@@ -28,6 +29,10 @@ if (process.env.HGV_E2E_CONFIRM !== "NO_CHARGE_DRAFT_ONLY") {
 const token = process.env.GHL_PIT;
 const locationId = process.env.GHL_LOCATION_ID || HGV_LOCATION_ID;
 if (!token) throw new Error("Missing GHL_PIT");
+if (E2E_BASE_URL && !process.env.HGV_GHL_WEBHOOK_SECRET) throw new Error("Missing HGV_GHL_WEBHOOK_SECRET");
+if (E2E_BASE_URL && !process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+  throw new Error("Missing VERCEL_AUTOMATION_BYPASS_SECRET");
+}
 
 async function request(path, { method = "GET", body, version = "v3", allowNotFound = false } = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -49,6 +54,23 @@ async function request(path, { method = "GET", body, version = "v3", allowNotFou
   }
   if (!response.ok && !(allowNotFound && response.status === 404)) {
     throw new Error(`${method} ${path} failed (${response.status}): ${parsed.message || parsed.error || "unknown error"}`);
+  }
+  return parsed;
+}
+
+async function requestPreview(path, body) {
+  const response = await fetch(`${E2E_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-hgv-webhook-secret": process.env.HGV_GHL_WEBHOOK_SECRET,
+      "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+    },
+    body: JSON.stringify(body),
+  });
+  const parsed = await response.json();
+  if (!response.ok) {
+    throw new Error(`POST ${path} failed (${response.status}): ${parsed.error || "unknown error"}`);
   }
   return parsed;
 }
@@ -88,18 +110,6 @@ try {
   const protectedContact = (await request(`/contacts/${contact.id}`, { version: "2021-07-28" })).contact || {};
   assert.equal(protectedContact.dnd, true, "synthetic contact must be do-not-contact before opportunity creation");
 
-  const ledger = createGhlObjectLedger({
-    token,
-    locationId,
-    schemaKey: BOOKING_OBJECT_KEY,
-  });
-  const ghl = {
-    ...realGhl,
-    async upsertContact() {
-      return { id: contact.id, raw: protectedContact };
-    },
-  };
-  const orchestrator = createBookingOrchestrator({ ledger, ghl });
   const payload = {
     form_type: "booking",
     website_booking_id: bookingId,
@@ -118,15 +128,51 @@ try {
     source_page: "HGV guarded no-charge E2E",
   };
 
-  const submitted = await orchestrator.submit(payload);
+  const ledger = createGhlObjectLedger({
+    token,
+    locationId,
+    schemaKey: BOOKING_OBJECT_KEY,
+  });
+  const ghl = {
+    ...realGhl,
+    async upsertContact() {
+      return { id: contact.id, raw: protectedContact };
+    },
+  };
+  const orchestrator = createBookingOrchestrator({ ledger, ghl });
+  const submitted = E2E_BASE_URL
+    ? await requestPreview("/api/hgv-bookings", payload)
+    : await orchestrator.submit(payload);
   cleanup.opportunityId = submitted.opportunityId;
-  const duplicateBooking = await orchestrator.submit(payload);
+  const duplicateBooking = E2E_BASE_URL
+    ? await requestPreview("/api/hgv-bookings", payload)
+    : await orchestrator.submit(payload);
   assert.equal(duplicateBooking.duplicate, true);
   assert.equal(duplicateBooking.opportunityId, submitted.opportunityId);
 
-  const invoice = await orchestrator.createInvoice({ bookingId, sendMode: "draft", dueDays: 7 });
+  if (E2E_BASE_URL) {
+    const appointment = await requestPreview("/api/hgv-ghl-webhook", {
+      id: `hgv-appointment-${suffix}`,
+      contactId: contact.id,
+      assignedUserId: "",
+      appointmentStatus: "new",
+      title: "HGV No Charge Test Appointment",
+      address: propertyAddress,
+      startTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(),
+    });
+    assert.equal(appointment.matched, true);
+    assert.equal(appointment.bookingId, bookingId);
+    assert.equal(appointment.opportunityId, submitted.opportunityId);
+  }
+
+  const invoice = E2E_BASE_URL
+    ? await requestPreview("/api/hgv-invoice", { website_booking_id: bookingId })
+    : await orchestrator.createInvoice({ bookingId, sendMode: "draft", dueDays: 7 });
   cleanup.invoiceId = invoice.invoiceId;
-  const duplicateInvoice = await orchestrator.createInvoice({ bookingId, sendMode: "draft", dueDays: 7 });
+  const duplicateInvoice = E2E_BASE_URL
+    ? await requestPreview("/api/hgv-invoice", { website_booking_id: bookingId })
+    : await orchestrator.createInvoice({ bookingId, sendMode: "draft", dueDays: 7 });
   assert.equal(duplicateInvoice.duplicate, true);
   assert.equal(duplicateInvoice.invoiceId, invoice.invoiceId);
 
@@ -139,6 +185,7 @@ try {
   );
   assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.websiteBookingId), bookingId);
   assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.propertyAddress), propertyAddress);
+  if (E2E_BASE_URL) assert.equal(opportunity.pipelineStageId, HGV_STAGE_IDS.awaitingConfirmation);
 
   const invoiceRecord = await request(
     `/invoices/${invoice.invoiceId}?altId=${encodeURIComponent(locationId)}&altType=location`,
@@ -161,6 +208,8 @@ try {
     charged: false,
     duplicateBookingSuppressed: true,
     duplicateInvoiceSuppressed: true,
+    previewApiVerified: Boolean(E2E_BASE_URL),
+    appointmentReconciliationVerified: Boolean(E2E_BASE_URL),
     opportunityFieldsVerified: true,
     invoiceItemizationVerified: true,
     invoiceAddressVerified: true,
