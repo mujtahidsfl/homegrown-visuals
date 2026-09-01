@@ -246,22 +246,46 @@ function checkCalendarRouting(calendars) {
   for (const id of ids.deanOnly) {
     const calendar = byId.get(id);
     const members = selectedTeamMembers(calendar || {});
-    rows.push({ id, expected: "Dean Only", name: calendar?.name || null, selectedUserCount: members.length });
+    const expectedDuration = expectedCalendarDuration(calendar?.name);
+    const slotDuration = Number(calendar?.slotDuration ?? 0) || null;
+    rows.push({
+      id,
+      expected: "Dean Only",
+      name: calendar?.name || null,
+      selectedUserCount: members.length,
+      expectedDuration,
+      slotDuration,
+    });
     if (!calendar) {
       issues.push(`Website Dean-only calendar ${id} is missing from GHL`);
     } else if (members.length !== 1) {
       issues.push(`Website Dean-only calendar ${calendar.name} has ${members.length} selected users`);
+    }
+    if (calendar && expectedDuration && slotDuration !== expectedDuration) {
+      issues.push(`Website Dean-only calendar ${calendar.name} has ${slotDuration || "no"}-minute duration; expected ${expectedDuration}`);
     }
   }
 
   for (const id of ids.roundRobin) {
     const calendar = byId.get(id);
     const members = selectedTeamMembers(calendar || {});
-    rows.push({ id, expected: "Dean + Brayden", name: calendar?.name || null, selectedUserCount: members.length });
+    const expectedDuration = expectedCalendarDuration(calendar?.name);
+    const slotDuration = Number(calendar?.slotDuration ?? 0) || null;
+    rows.push({
+      id,
+      expected: "Dean + Brayden",
+      name: calendar?.name || null,
+      selectedUserCount: members.length,
+      expectedDuration,
+      slotDuration,
+    });
     if (!calendar) {
       issues.push(`Website round-robin calendar ${id} is missing from GHL`);
     } else if (members.length < 2) {
       issues.push(`Website round-robin calendar ${calendar.name} has only ${members.length} selected user(s)`);
+    }
+    if (calendar && expectedDuration && slotDuration !== expectedDuration) {
+      issues.push(`Website round-robin calendar ${calendar.name} has ${slotDuration || "no"}-minute duration; expected ${expectedDuration}`);
     }
   }
 
@@ -601,7 +625,7 @@ function renderMarkdown(report, jsonPath) {
   lines.push("", "## Website Calendar Routing", "");
   if (report.calendarRouting?.checked?.length) {
     for (const row of report.calendarRouting.checked) {
-      lines.push(`- ${row.expected}: ${row.name || row.id} (${row.selectedUserCount} selected user${row.selectedUserCount === 1 ? "" : "s"})`);
+      lines.push(`- ${row.expected}: ${row.name || row.id} (${row.selectedUserCount} selected user${row.selectedUserCount === 1 ? "" : "s"}; ${row.slotDuration ?? "unknown"}/${row.expectedDuration ?? "unknown"} min actual/expected)`);
     }
   } else {
     lines.push("- Not checked.");
