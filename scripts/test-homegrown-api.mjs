@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import bookingHandler, { submitWithSettling } from "../api/hgv-bookings.js";
 import appointmentHandler from "../api/hgv-ghl-webhook.js";
 import invoiceHandler from "../api/hgv-invoice.js";
+import { createGhlClient } from "../api/_hgv/ghl.js";
 
 function makeReq(body, url, method = "POST", headers = {}) {
   return {
@@ -46,6 +47,27 @@ const bookingPayload = {
 const originalMode = process.env.HGV_ORCHESTRATOR_MODE;
 const originalSecret = process.env.HGV_GHL_WEBHOOK_SECRET;
 try {
+  let capturedContactBody;
+  const phoneOnlyClient = createGhlClient({
+    token: "test-token",
+    fetchImpl: async (_url, options) => {
+      capturedContactBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ contact: { id: "phone-only-contact" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+  await phoneOnlyClient.upsertContact({
+    fullName: "Phone Only",
+    firstName: "Phone",
+    lastName: "Only",
+    email: "",
+    phone: "+15555550100",
+  });
+  assert.equal(capturedContactBody.phone, "+15555550100");
+  assert.equal("email" in capturedContactBody, false);
+
   process.env.HGV_ORCHESTRATOR_MODE = "off";
   process.env.HGV_GHL_WEBHOOK_SECRET = "test-webhook-secret";
 

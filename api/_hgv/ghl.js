@@ -113,8 +113,8 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
           name: contact.fullName,
           firstName: contact.firstName,
           lastName: contact.lastName,
-          email: contact.email,
-          phone: contact.phone,
+          ...(contact.email ? { email: contact.email } : {}),
+          ...(contact.phone ? { phone: contact.phone } : {}),
           ...(propertyAddress
             ? {
                 customFields: [{
