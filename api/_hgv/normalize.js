@@ -23,6 +23,15 @@ function splitName(fullName) {
   return { firstName: parts[0] || "", lastName: parts.slice(1).join(" ") };
 }
 
+function normalizePhone(value) {
+  const raw = asString(value);
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return raw.startsWith("+") ? `+${digits}` : raw;
+}
+
 function normalizeContact(payload) {
   const contact = asObject(payload.contact);
   const agent = asObject(payload.agent);
@@ -39,7 +48,7 @@ function normalizeContact(payload) {
     firstName: asString(contact.first_name) || asString(contact.firstName) || split.firstName,
     lastName: asString(contact.last_name) || asString(contact.lastName) || split.lastName,
     email: (asString(contact.email) || asString(agent.email)).toLowerCase(),
-    phone: asString(contact.phone) || asString(agent.phone),
+    phone: normalizePhone(asString(contact.phone) || asString(agent.phone)),
   };
 }
 

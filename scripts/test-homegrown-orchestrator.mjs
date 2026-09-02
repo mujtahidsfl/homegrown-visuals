@@ -9,7 +9,7 @@ function payload(bookingId, address = "123 Current Job Ave") {
     booking_path: "real_estate",
     package: "Standard Package",
     property_address: address,
-    contact: { fullName: "Repeat Client", email: "repeat@example.com", phone: "+15555550100" },
+    contact: { fullName: "Repeat Client", email: "repeat@example.com", phone: "555-555-0100" },
     estimated_total: 453,
     invoice_line_items: [{ id: "standard", name: "Standard Package", amount: 453, quantity: 1 }],
     schedule: { schedulerUrl: "https://api.leadconnectorhq.com/widget/booking/calendarA" },
@@ -139,6 +139,7 @@ const first = await harness.orchestrator.submit(payload("booking-a"));
 const retry = await harness.orchestrator.submit(payload("booking-a"));
 assert.equal(first.opportunityId, "opportunity-1");
 assert.equal(harness.contactUpserts[0].options.propertyAddress, "123 Current Job Ave");
+assert.equal(harness.contactUpserts[0].contact.phone, "+15555550100");
 assert.equal(retry.opportunityId, "opportunity-1");
 assert.equal(retry.duplicate, true);
 assert.equal(harness.createCount, 1, "same booking id must create exactly one opportunity");
