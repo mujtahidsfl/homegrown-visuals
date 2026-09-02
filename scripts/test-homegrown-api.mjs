@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import bookingHandler, { submitWithSettling } from "../api/hgv-bookings.js";
 import appointmentHandler from "../api/hgv-ghl-webhook.js";
-import invoiceHandler from "../api/hgv-invoice.js";
+import invoiceHandler, { extractInvoiceIdentifiers } from "../api/hgv-invoice.js";
 import { createGhlClient } from "../api/_hgv/ghl.js";
 
 function makeReq(body, url, method = "POST", headers = {}) {
@@ -47,6 +47,15 @@ const bookingPayload = {
 const originalMode = process.env.HGV_ORCHESTRATOR_MODE;
 const originalSecret = process.env.HGV_GHL_WEBHOOK_SECRET;
 try {
+  assert.deepEqual(
+    extractInvoiceIdentifiers({ customData: { website_booking_id: "nested-booking" } }),
+    { bookingId: "nested-booking", opportunityId: "" },
+  );
+  assert.deepEqual(
+    extractInvoiceIdentifiers({ data: { "Opportunity ID": "nested-opportunity" } }),
+    { bookingId: "", opportunityId: "nested-opportunity" },
+  );
+
   let capturedContactBody;
   const phoneOnlyClient = createGhlClient({
     token: "test-token",

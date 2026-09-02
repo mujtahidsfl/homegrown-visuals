@@ -104,6 +104,11 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
   }
 
   return {
+    async getOpportunity(opportunityId) {
+      const body = await request(`/opportunities/${opportunityId}`);
+      return body.opportunity || body;
+    },
+
     async upsertContact(contact, { propertyAddress = "" } = {}) {
       const body = await request("/contacts/upsert", {
         method: "POST",

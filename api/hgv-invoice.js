@@ -1,10 +1,43 @@
 import { createGhlClient } from "./_hgv/ghl.js";
+import { OPPORTUNITY_FIELD_IDS } from "./_hgv/config.js";
 import { readJson, requestUrl, sendJson } from "./_hgv/http.js";
 import { createGhlObjectLedger } from "./_hgv/ledger.js";
 import { createBookingOrchestrator } from "./_hgv/orchestrator.js";
 
 function providedSecret(req, url) {
   return req.headers?.["x-hgv-webhook-secret"] || url.searchParams.get("secret") || "";
+}
+
+function normalizedKey(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function nestedValue(source, acceptedKeys, depth = 0) {
+  if (!source || typeof source !== "object" || depth > 5) return "";
+  const entries = Object.entries(source);
+  for (const [key, value] of entries) {
+    if (acceptedKeys.has(normalizedKey(key)) && ["string", "number"].includes(typeof value)) {
+      const candidate = String(value).trim();
+      if (candidate) return candidate;
+    }
+  }
+  for (const [, value] of entries) {
+    if (value && typeof value === "object") {
+      const candidate = nestedValue(value, acceptedKeys, depth + 1);
+      if (candidate) return candidate;
+    }
+  }
+  return "";
+}
+
+export function extractInvoiceIdentifiers(payload) {
+  const bookingId = nestedValue(payload, new Set(["websitebookingid", "bookingid"]));
+  const opportunityId = nestedValue(payload, new Set(["opportunityid"]));
+  return { bookingId, opportunityId };
+}
+
+function fieldValue(field) {
+  return field?.fieldValue ?? field?.fieldValueString ?? field?.value ?? "";
 }
 
 export default async function handler(req, res) {
@@ -27,7 +60,23 @@ export default async function handler(req, res) {
   } catch {
     return sendJson(res, 400, { ok: false, error: "Invalid JSON body" });
   }
-  const bookingId = String(payload.website_booking_id || payload.booking_id || "").trim();
+  const identifiers = extractInvoiceIdentifiers(payload);
+  let bookingId = identifiers.bookingId;
+  let token;
+  let ghl;
+  if (!bookingId && identifiers.opportunityId) {
+    try {
+      token = process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN;
+      ghl = createGhlClient({ token, locationId: process.env.GHL_LOCATION_ID });
+      const opportunity = await ghl.getOpportunity(identifiers.opportunityId);
+      const bookingField = (opportunity.customFields || []).find(
+        (field) => field.id === OPPORTUNITY_FIELD_IDS.websiteBookingId,
+      );
+      bookingId = String(fieldValue(bookingField)).trim();
+    } catch {
+      bookingId = "";
+    }
+  }
   if (!bookingId) {
     return sendJson(res, 400, { ok: false, error: "Missing website booking id" });
   }
@@ -37,15 +86,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const token = process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN;
+    token ||= process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN;
+    ghl ||= createGhlClient({ token, locationId: process.env.GHL_LOCATION_ID });
     const ledger = createGhlObjectLedger({
       token,
       locationId: process.env.GHL_LOCATION_ID,
       schemaKey: process.env.HGV_GHL_BOOKING_OBJECT_KEY || "custom_objects.booking_jobs",
-    });
-    const ghl = createGhlClient({
-      token,
-      locationId: process.env.GHL_LOCATION_ID,
     });
     const result = await createBookingOrchestrator({ ledger, ghl }).createInvoice({
       bookingId,
