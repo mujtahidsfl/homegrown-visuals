@@ -36,6 +36,10 @@ export function extractInvoiceIdentifiers(payload) {
   return { bookingId, opportunityId };
 }
 
+export function resolveInvoiceSendMode(env = process.env) {
+  return String(env.HGV_INVOICE_AUTOSEND_MODE || "email").trim().toLowerCase();
+}
+
 function fieldValue(field) {
   return field?.fieldValue ?? field?.fieldValueString ?? field?.value ?? "";
 }
@@ -80,7 +84,7 @@ export default async function handler(req, res) {
   if (!bookingId) {
     return sendJson(res, 400, { ok: false, error: "Missing website booking id" });
   }
-  const sendMode = process.env.HGV_INVOICE_SEND_MODE || "draft";
+  const sendMode = resolveInvoiceSendMode();
   if (!["draft", "email", "sms", "sms_and_email"].includes(sendMode)) {
     return sendJson(res, 500, { ok: false, error: "Invalid invoice send mode" });
   }

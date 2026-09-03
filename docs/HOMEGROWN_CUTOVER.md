@@ -8,6 +8,7 @@ This runbook moves website booking intake, exact appointment matching, photograp
 - Production is deployed from `main` at `7c11967`.
 - The migration branch was merged from `codex/hgv-orchestrator-migration`.
 - All three replacement GHL workflows are published.
+- Confirmed bookings create and email one itemized GHL invoice by default. Set `HGV_INVOICE_AUTOSEND_MODE=draft` only as an emergency pause for invoice delivery.
 - The old broad appointment matcher and old automatic invoice webhook are unpublished.
 - The five Make booking-intake scenarios remain available only for the rollback window and should receive no traffic from the current website bundle.
 - Preview APIs and GHL Booking Jobs passed a guarded end-to-end test with no charge and cleanup.
@@ -38,7 +39,7 @@ Keep these active unless they receive a separate migration and test:
 
 - `acfc1e5f-6cdf-4769-a6e1-72e48e647500` - `[MIGRATION] Appointment Intake - Exact Booking`
 - `81104824-8502-4f36-b82c-27ac151251e7` - `[MIGRATION] Awaiting Confirmation - Exact Owner`
-- `5c9de72d-4c42-4bb8-a926-04bb4fac6b0f` - `[MIGRATION] Draft Invoice - Exact Booking`
+- `5c9de72d-4c42-4bb8-a926-04bb4fac6b0f` - `[MIGRATION] Draft Invoice - Exact Booking` (creates and emails the invoice; the historical workflow name is unchanged)
 
 ## Cutover Order
 

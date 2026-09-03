@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import bookingHandler, { submitWithSettling } from "../api/hgv-bookings.js";
 import appointmentHandler from "../api/hgv-ghl-webhook.js";
-import invoiceHandler, { extractInvoiceIdentifiers } from "../api/hgv-invoice.js";
+import invoiceHandler, { extractInvoiceIdentifiers, resolveInvoiceSendMode } from "../api/hgv-invoice.js";
 import { createGhlClient } from "../api/_hgv/ghl.js";
 
 function makeReq(body, url, method = "POST", headers = {}) {
@@ -55,6 +55,9 @@ try {
     extractInvoiceIdentifiers({ data: { "Opportunity ID": "nested-opportunity" } }),
     { bookingId: "", opportunityId: "nested-opportunity" },
   );
+  assert.equal(resolveInvoiceSendMode({}), "email");
+  assert.equal(resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "draft" }), "draft");
+  assert.equal(resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "SMS_AND_EMAIL" }), "sms_and_email");
 
   let capturedContactBody;
   const phoneOnlyClient = createGhlClient({
