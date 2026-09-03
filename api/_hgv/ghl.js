@@ -14,7 +14,10 @@ function valueOfField(field) {
 
 function responseError(status, body) {
   const message = body?.message || body?.error || `GHL request failed with status ${status}`;
-  return new Error(Array.isArray(message) ? message.join(", ") : String(message));
+  const error = new Error(Array.isArray(message) ? message.join(", ") : String(message));
+  error.status = status;
+  error.body = body;
+  return error;
 }
 
 function customField(id, fieldValue) {

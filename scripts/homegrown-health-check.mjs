@@ -10,7 +10,8 @@ const locationId = process.env.GHL_LOCATION_ID || "pwyt4yVmaVxmQpVX040D";
 const liveUrl = "https://www.homegrownvisualsmedia.com";
 const ghlBaseUrl = "https://services.leadconnectorhq.com";
 const ghlVersion = "2021-07-28";
-const sinceDefault = "2026-08-01T00:00:00-05:00";
+const sinceDefault = "2026-09-01T00:00:00-05:00";
+const bookingObjectKey = process.env.HGV_GHL_BOOKING_OBJECT_KEY || "custom_objects.booking_jobs";
 const servicesFlowPath = join(repoRoot, "src", "app", "components", "ServicesBookingFlow.tsx");
 
 const fieldIds = {
@@ -23,6 +24,8 @@ const fieldIds = {
   propertyAddress: "hykb9sK1p3HJLFYCG3QC",
   package: "nowyXiwMJG9SXRuvFsh3",
   invoiceLines: "slKug5Qij1s4OAWFwZH0",
+  addOns: "29Ns4qqClDXi9zrB5mov",
+  alaCarte: "d3TECwIRqTk4dK7FBkcl",
 };
 
 const stageNames = {
@@ -97,7 +100,7 @@ const ghlToken = process.env.GHL_PIT || process.env.GHL_HOMEGROWN_API_TOKEN;
 
 function fieldValue(opportunity, id) {
   const field = (opportunity.customFields || []).find((item) => item.id === id);
-  return field?.fieldValueString ?? field?.fieldValueDate ?? field?.value ?? "";
+  return field?.fieldValue ?? field?.fieldValueString ?? field?.fieldValueDate ?? field?.value ?? "";
 }
 
 async function fetchJson(url, options = {}) {
@@ -125,6 +128,61 @@ async function ghlGet(path) {
     throw new Error(`${response.status} ${path}: ${JSON.stringify(response.body).slice(0, 500)}`);
   }
   return response.body;
+}
+
+async function ghlRequest(path, { method = "GET", body, version = "v3", allowNotFound = false } = {}) {
+  if (!ghlToken) throw new Error("Missing GHL_PIT or GHL_HOMEGROWN_API_TOKEN");
+  const response = await fetchJson(`${ghlBaseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${ghlToken}`,
+      Version: version,
+      Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!response.ok && !(allowNotFound && response.status === 404)) {
+    throw new Error(`${response.status} ${path}: ${JSON.stringify(response.body).slice(0, 500)}`);
+  }
+  return response.status === 404 ? null : response.body;
+}
+
+async function bookingJobByAppointmentId(appointmentId) {
+  const body = await ghlRequest(`/objects/${bookingObjectKey}/records/search`, {
+    method: "POST",
+    body: { locationId, page: 1, pageLimit: 100, query: appointmentId, searchAfter: [] },
+  });
+  const result = (body.records || []).find(
+    (record) => String(record.properties?.appointment_id || "") === String(appointmentId),
+  );
+  if (!result) return null;
+  const detail = await ghlRequest(
+    `/objects/${bookingObjectKey}/records/${result.id}?locationId=${encodeURIComponent(locationId)}`,
+  );
+  const record = detail.record || detail;
+  let payload = null;
+  try {
+    payload = JSON.parse(record.properties?.payload_json || "null");
+  } catch {
+    payload = null;
+  }
+  return { id: record.id, ...record.properties, payload };
+}
+
+async function opportunityById(opportunityId) {
+  if (!opportunityId) return null;
+  const body = await ghlRequest(`/opportunities/${opportunityId}`, { allowNotFound: true });
+  return body ? body.opportunity || body : null;
+}
+
+async function invoiceById(invoiceId) {
+  if (!invoiceId) return null;
+  const body = await ghlRequest(
+    `/invoices/${invoiceId}?altId=${encodeURIComponent(locationId)}&altType=location`,
+    { allowNotFound: true },
+  );
+  return body ? body.invoice || body : null;
 }
 
 async function checkWebsite() {
@@ -367,45 +425,107 @@ async function getFutureEvents(calendars) {
   return events;
 }
 
+function opportunityRow(opportunity) {
+  if (!opportunity) return null;
+  return {
+    id: opportunity.id,
+    name: opportunity.name,
+    stage: stageNames[opportunity.pipelineStageId] || opportunity.pipelineStageId,
+    assignedTo: opportunity.assignedTo || null,
+    value: opportunity.monetaryValue,
+    updatedAt: opportunity.updatedAt,
+    fields: {
+      package: fieldValue(opportunity, fieldIds.package),
+      propertyAddress: fieldValue(opportunity, fieldIds.propertyAddress),
+      websiteBookingId: fieldValue(opportunity, fieldIds.websiteBookingId),
+      meetingDate: fieldValue(opportunity, fieldIds.meetingDate),
+      meetingStart: fieldValue(opportunity, fieldIds.meetingStart),
+      meetingEnd: fieldValue(opportunity, fieldIds.meetingEnd),
+      paymentLink: fieldValue(opportunity, fieldIds.paymentLink),
+      invoiceDue: fieldValue(opportunity, fieldIds.invoiceDue),
+      invoiceLines: fieldValue(opportunity, fieldIds.invoiceLines),
+      addOns: fieldValue(opportunity, fieldIds.addOns),
+      alaCarte: fieldValue(opportunity, fieldIds.alaCarte),
+    },
+  };
+}
+
+function normalizedItemName(value) {
+  return String(value || "").normalize("NFKD").toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+}
+
+function categorizedNames(payload, categoryPattern) {
+  return (payload?.lineItems || [])
+    .filter((item) => categoryPattern.test(String(item.category || "")))
+    .map((item) => String(item.name || "").trim())
+    .filter(Boolean);
+}
+
+function missingNames(actual, expected) {
+  const haystack = normalizedItemName(actual);
+  return expected.filter((name) => !haystack.includes(normalizedItemName(name)));
+}
+
+async function auditInvoice(job) {
+  if (!job?.invoice_id) return { invoice: null, risks: [] };
+  const invoice = await invoiceById(job.invoice_id);
+  if (!invoice) return { invoice: null, risks: ["Booking Job references a missing invoice"] };
+
+  const risks = [];
+  const expectedItems = (job.payload?.lineItems || []).filter((item) => Number(item.amount) >= 0);
+  const actualItems = invoice.invoiceItems || invoice.items || [];
+  const expectedNames = expectedItems.map((item) => normalizedItemName(item.name)).sort();
+  const actualNames = actualItems.map((item) => normalizedItemName(item.name)).sort();
+  if (JSON.stringify(expectedNames) !== JSON.stringify(actualNames)) {
+    risks.push("invoice line items do not match the saved booking");
+  }
+  const expectedTotal = Number(job.payload?.estimatedTotal);
+  if (Number.isFinite(expectedTotal) && Math.abs(Number(invoice.total) - expectedTotal) > 0.01) {
+    risks.push(`invoice total ${invoice.total} does not match booking total ${expectedTotal}`);
+  }
+  if (job.invoice_status === "sent" && invoice.status !== "sent") {
+    risks.push(`Booking Job says invoice sent but GHL invoice is ${invoice.status || "unknown"}`);
+  }
+  if (Number(invoice.amountPaid || 0) > Number(invoice.total || 0)) {
+    risks.push("invoice amount paid exceeds invoice total");
+  }
+  return {
+    invoice: {
+      id: invoice._id || invoice.id,
+      status: invoice.status,
+      total: invoice.total,
+      amountPaid: invoice.amountPaid || 0,
+      itemNames: actualItems.map((item) => item.name),
+    },
+    risks,
+  };
+}
+
 async function checkFutureBookings(calendars) {
   const events = await getFutureEvents(calendars);
   const report = [];
 
   for (const event of events) {
     const contact = (await ghlGet(`/contacts/${event.contactId}`)).contact || {};
+    const job = await bookingJobByAppointmentId(event.id);
     const opportunities =
       (await ghlGet(`/opportunities/search?location_id=${locationId}&contact_id=${event.contactId}&limit=50`))
         .opportunities || [];
     const coreOpen = opportunities.filter(
       (opportunity) => opportunity.pipelineId === "xBrSZz2liyIoEfZKQ8Uj" && opportunity.status === "open",
     );
-    const rows = coreOpen.map((opportunity) => ({
-      id: opportunity.id,
-      name: opportunity.name,
-      stage: stageNames[opportunity.pipelineStageId] || opportunity.pipelineStageId,
-      assignedTo: opportunity.assignedTo || null,
-      value: opportunity.monetaryValue,
-      updatedAt: opportunity.updatedAt,
-      fields: {
-        package: fieldValue(opportunity, fieldIds.package),
-        propertyAddress: fieldValue(opportunity, fieldIds.propertyAddress),
-        websiteBookingId: fieldValue(opportunity, fieldIds.websiteBookingId),
-        meetingDate: fieldValue(opportunity, fieldIds.meetingDate),
-        meetingStart: fieldValue(opportunity, fieldIds.meetingStart),
-        meetingEnd: fieldValue(opportunity, fieldIds.meetingEnd),
-        paymentLink: fieldValue(opportunity, fieldIds.paymentLink),
-        invoiceDue: fieldValue(opportunity, fieldIds.invoiceDue),
-        invoiceLines: fieldValue(opportunity, fieldIds.invoiceLines),
-      },
-    }));
-    const current =
-      rows
-        .filter((row) => row.fields.meetingDate || row.fields.meetingStart || row.fields.propertyAddress)
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] || rows[0];
+    const rows = coreOpen.map(opportunityRow);
+    const exactOpportunity = await opportunityById(job?.opportunity_id);
+    const exactRow = opportunityRow(exactOpportunity);
+    const bookingId = String(job?.website_booking_id || job?.payload?.bookingId || "");
+    const current = exactRow || rows.find((row) => bookingId && row.fields.websiteBookingId === bookingId) || null;
     const status = event.appointmentStatus || event.appoinmentStatus || "unknown";
     const risks = [];
-    if (status !== "confirmed") risks.push("appointment is not confirmed");
-    if (rows.length > 1) risks.push(`${rows.length} open opportunities on same contact`);
+    if (!job) risks.push("appointment has no exact Booking Job ledger record");
+    if (job?.opportunity_id && !exactOpportunity) risks.push("Booking Job references a missing opportunity");
+    if (!current) risks.push("appointment has no exact matching opportunity");
+    const sameBookingRows = rows.filter((row) => bookingId && row.fields.websiteBookingId === bookingId);
+    if (sameBookingRows.length > 1) risks.push(`${sameBookingRows.length} opportunities share the same website booking ID`);
     if (current && !current.fields.propertyAddress) risks.push("current opportunity missing property address");
     if (current && !current.fields.websiteBookingId) risks.push("current opportunity missing website booking ID");
     if (current && (!current.fields.meetingDate || !current.fields.meetingStart || !current.fields.meetingEnd)) {
@@ -436,10 +556,17 @@ async function checkFutureBookings(calendars) {
       );
     }
     if (current?.stage === "Booking Confirmed") {
-      if (!current.fields.paymentLink) risks.push("confirmed opportunity missing Stripe payment link");
-      if (!current.fields.invoiceDue) risks.push("confirmed opportunity missing invoice due date");
-      if (!current.fields.invoiceLines) risks.push("confirmed opportunity missing invoice line-item payload");
+      if (job && !job.invoice_id) risks.push("confirmed booking is missing its GHL invoice");
+      if (!job && !current.fields.paymentLink) risks.push("legacy confirmed opportunity missing Stripe payment link");
     }
+    const expectedAddOns = categorizedNames(job?.payload, /^add[\s-]*ons?$/i);
+    const expectedAlaCarte = categorizedNames(job?.payload, /^a\s*la\s*carte$/i);
+    const missingAddOns = missingNames(current?.fields.addOns, expectedAddOns);
+    const missingAlaCarte = missingNames(current?.fields.alaCarte, expectedAlaCarte);
+    if (missingAddOns.length) risks.push(`opportunity missing add-on selection(s): ${missingAddOns.join(", ")}`);
+    if (missingAlaCarte.length) risks.push(`opportunity missing A La Carte selection(s): ${missingAlaCarte.join(", ")}`);
+    const invoiceAudit = await auditInvoice(job);
+    risks.push(...invoiceAudit.risks);
     const packageName = String(current?.fields.package || current?.name || "").toLowerCase();
     if (packageName.includes("luxury") && selectedTeamMembers({ teamMembers: event.calendarTeamMemberIds?.map((userId) => ({ userId })) }).length > 1) {
       risks.push("luxury booking is on a Dean + Brayden calendar instead of a Dean-only calendar");
@@ -465,6 +592,15 @@ async function checkFutureBookings(calendars) {
       risks,
       currentOpportunity: current || null,
       openOpportunityCount: rows.length,
+      bookingJob: job ? {
+        id: job.id,
+        bookingId,
+        status: job.status,
+        opportunityId: job.opportunity_id || null,
+        invoiceId: job.invoice_id || null,
+        invoiceStatus: job.invoice_status || null,
+      } : null,
+      invoice: invoiceAudit.invoice,
     });
   }
 

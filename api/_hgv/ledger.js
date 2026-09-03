@@ -222,6 +222,16 @@ export function createGhlObjectLedger({
       }));
     },
 
+    async updateOpportunityReference(bookingId, values, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
+      if (!record) throw new Error("No GHL Booking Job matched the opportunity update");
+      return rowFromRecord(await updateRecord(record.id, {
+        contact_id: values.contact_id,
+        opportunity_id: values.opportunity_id,
+        error: "",
+      }));
+    },
+
     async failBooking(bookingId, error, recordId = "") {
       const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) return;

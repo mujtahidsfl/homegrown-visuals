@@ -1,17 +1,97 @@
 import { randomUUID } from "node:crypto";
-import { HGV_STAGE_IDS } from "./config.js";
+import { HGV_STAGE_IDS, OPPORTUNITY_FIELD_IDS } from "./config.js";
 import { appointmentCustomFields } from "./ghl.js";
-import { normalizeAppointmentWebhook, normalizeBookingPayload } from "./normalize.js";
+import {
+  normalizeAppointmentWebhook,
+  normalizeBookingPayload,
+  selectionFieldsFromLineItems,
+} from "./normalize.js";
 
 function bookingFromLedgerPayload(payload) {
-  return payload?.bookingId && payload?.contact && Array.isArray(payload?.lineItems)
-    ? payload
-    : normalizeBookingPayload(payload);
+  if (!(payload?.bookingId && payload?.contact && Array.isArray(payload?.lineItems))) {
+    return normalizeBookingPayload(payload);
+  }
+  return {
+    ...payload,
+    ...selectionFieldsFromLineItems(payload),
+  };
+}
+
+function isNotFound(error) {
+  return error?.status === 404;
+}
+
+function opportunityMatchesBooking(opportunity, bookingId) {
+  if (opportunity?.bookingId === bookingId) return true;
+  return (opportunity?.customFields || []).some((field) =>
+    field.id === OPPORTUNITY_FIELD_IDS.websiteBookingId
+    && String(field.fieldValue ?? field.fieldValueString ?? field.value ?? "") === bookingId,
+  );
+}
+
+function recoveryStage(row, booking) {
+  if (row.invoice_id || ["invoice_created", "invoiced"].includes(row.status)) {
+    return HGV_STAGE_IDS.bookingConfirmed;
+  }
+  if (row.appointment_id || row.status === "scheduled") return HGV_STAGE_IDS.awaitingConfirmation;
+  return booking.pipelineStageId;
 }
 
 export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = randomUUID } = {}) {
   if (!ledger) throw new Error("Missing booking ledger");
   if (!ghl) throw new Error("Missing GHL client");
+
+  async function ensureOpportunity(row, normalizedBooking = null) {
+    let opportunity = null;
+    let repaired = false;
+    const booking = normalizedBooking || bookingFromLedgerPayload(row.payload);
+
+    if (row.opportunity_id) {
+      try {
+        opportunity = await ghl.getOpportunity(row.opportunity_id);
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+      if (opportunity && !opportunityMatchesBooking(opportunity, booking.bookingId)) opportunity = null;
+    }
+
+    let contactId = row.contact_id;
+    if (!contactId) {
+      const contact = await ghl.upsertContact(booking.contact, { propertyAddress: booking.propertyAddress });
+      contactId = contact.id;
+    }
+
+    if (!opportunity) {
+      opportunity = await ghl.findOpportunityByBookingId(contactId, booking.bookingId);
+    }
+    if (!opportunity) {
+      opportunity = await ghl.createOpportunity({
+        ...booking,
+        pipelineStageId: recoveryStage(row, booking),
+      }, contactId);
+      repaired = true;
+    }
+
+    if (opportunity.id !== row.opportunity_id || contactId !== row.contact_id) {
+      await ledger.updateOpportunityReference(booking.bookingId, {
+        contact_id: contactId,
+        opportunity_id: opportunity.id,
+      }, row.record_id);
+    }
+
+    if (repaired && (row.assigned_user_id || row.appointment_start || row.appointment_end)) {
+      const customFields = appointmentCustomFields({
+        startTime: row.appointment_start,
+        endTime: row.appointment_end,
+      });
+      await ghl.updateOpportunity(opportunity.id, {
+        ...(row.assigned_user_id ? { assignedTo: row.assigned_user_id } : {}),
+        ...(customFields.length ? { customFields } : {}),
+      });
+    }
+
+    return { opportunity, contactId, repaired };
+  }
 
   return {
     async submit(rawPayload) {
@@ -21,12 +101,25 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
       if (!claim) throw new Error("Booking ledger did not return a claim");
 
       if (!claim.acquired) {
+        if (claim.status === "processing" && !claim.opportunity_id) {
+          return {
+            ok: true,
+            duplicate: true,
+            pending: true,
+            bookingId: booking.bookingId,
+            contactId: claim.contact_id || null,
+            opportunityId: null,
+            status: claim.status,
+          };
+        }
+        const ensured = await ensureOpportunity(claim, booking);
         return {
           ok: true,
           duplicate: true,
+          repaired: ensured.repaired,
           bookingId: booking.bookingId,
-          contactId: claim.contact_id || null,
-          opportunityId: claim.opportunity_id || null,
+          contactId: ensured.contactId,
+          opportunityId: ensured.opportunity.id,
           status: claim.status,
         };
       }
@@ -71,28 +164,41 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
           reason: "No unique pending booking matched this appointment",
         };
       }
-      if (!booking.opportunity_id) throw new Error("Matched booking has no GHL opportunity id");
+      if (appointment.deleted) {
+        await ledger.updateAppointment(booking.booking_id, appointment, "cancelled", booking.record_id);
+        return {
+          ok: true,
+          matched: true,
+          bookingId: booking.booking_id,
+          opportunityId: booking.opportunity_id,
+          appointmentId: appointment.id,
+          status: "cancelled",
+        };
+      }
+
+      const ensured = await ensureOpportunity(booking);
 
       const customFields = appointmentCustomFields(appointment);
-      const isInitialAppointment = booking.status === "opportunity_created" && !appointment.deleted;
+      const isInitialAppointment = booking.status === "opportunity_created";
       const opportunityChanges = {
         ...(appointment.assignedUserId ? { assignedTo: appointment.assignedUserId } : {}),
         ...(isInitialAppointment ? { pipelineStageId: HGV_STAGE_IDS.awaitingConfirmation } : {}),
         ...(customFields.length ? { customFields } : {}),
       };
       if (Object.keys(opportunityChanges).length) {
-        await ghl.updateOpportunity(booking.opportunity_id, opportunityChanges);
+        await ghl.updateOpportunity(ensured.opportunity.id, opportunityChanges);
       }
-      const status = appointment.deleted ? "cancelled" : "scheduled";
+      const status = "scheduled";
       await ledger.updateAppointment(booking.booking_id, appointment, status, booking.record_id);
 
       return {
         ok: true,
         matched: true,
         bookingId: booking.booking_id,
-        opportunityId: booking.opportunity_id,
+        opportunityId: ensured.opportunity.id,
         appointmentId: appointment.id,
         status,
+        repaired: ensured.repaired,
       };
     },
 

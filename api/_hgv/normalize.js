@@ -107,6 +107,13 @@ function lineItemNames(lineItems, categoryPattern) {
     .map((item) => item.name);
 }
 
+export function selectionFieldsFromLineItems({ addOns = "", alaCarte = "", lineItems = [] } = {}) {
+  return {
+    addOns: uniqueLines(addOns, lineItemNames(lineItems, /^add[\s-]*ons?$/i)),
+    alaCarte: uniqueLines(alaCarte, lineItemNames(lineItems, /^a\s*la\s*carte$/i)),
+  };
+}
+
 export function normalizeBookingPayload(payload) {
   const source = asObject(payload);
   const property = asObject(source.property);
@@ -120,20 +127,23 @@ export function normalizeBookingPayload(payload) {
   const lineItems = normalizeLineItems(source);
   const bookingPath = asString(source.booking_path) || "legacy_package";
   const structuredSelections = asObject(source.selections);
-  const addOns = uniqueLines(
+  const explicitAddOns = uniqueLines(
     source.addons,
     source.add_ons,
     structuredSelections.addons,
     structuredSelections.add_ons,
-    lineItemNames(lineItems, /^add[\s-]*ons?$/i),
   );
-  const alaCarte = uniqueLines(
+  const explicitAlaCarte = uniqueLines(
     source.ala_carte,
     source.alaCarte,
     structuredSelections.a_la_carte,
     structuredSelections.ala_carte,
-    lineItemNames(lineItems, /^a\s*la\s*carte$/i),
   );
+  const { addOns, alaCarte } = selectionFieldsFromLineItems({
+    addOns: explicitAddOns,
+    alaCarte: explicitAlaCarte,
+    lineItems,
+  });
 
   if (!bookingId) throw new Error("Missing website_booking_id");
   if (!contact.email && !contact.phone) throw new Error("Missing contact email or phone");

@@ -67,6 +67,11 @@ function makeHarness() {
       rows.set(bookingId, row);
       return row;
     },
+    async updateOpportunityReference(bookingId, values) {
+      const row = { ...rows.get(bookingId), ...values };
+      rows.set(bookingId, row);
+      return row;
+    },
     async failBooking(bookingId, error) {
       rows.set(bookingId, { ...rows.get(bookingId), status: "failed", error: String(error) });
     },
@@ -104,6 +109,13 @@ function makeHarness() {
   };
 
   const ghl = {
+    async getOpportunity(id) {
+      const opportunity = opportunities.find((candidate) => candidate.id === id);
+      if (opportunity) return opportunity;
+      const error = new Error("Opportunity not found");
+      error.status = 404;
+      throw error;
+    },
     async upsertContact(contact, options) {
       contactUpserts.push({ contact, options });
       return { id: "contact-repeat" };
@@ -113,7 +125,7 @@ function makeHarness() {
     },
     async createOpportunity(booking) {
       createCount += 1;
-      const opportunity = { id: `opportunity-${createCount}`, bookingId: booking.bookingId };
+      const opportunity = { id: `opportunity-${createCount}`, bookingId: booking.bookingId, booking };
       opportunities.push(opportunity);
       return opportunity;
     },
@@ -162,9 +174,52 @@ assert.equal(retry.opportunityId, "opportunity-1");
 assert.equal(retry.duplicate, true);
 assert.equal(harness.createCount, 1, "same booking id must create exactly one opportunity");
 
+const inFlight = makeHarness();
+inFlight.rows.set("booking-in-flight", {
+  booking_id: "booking-in-flight",
+  status: "processing",
+  payload: payload("booking-in-flight"),
+});
+const pendingRetry = await inFlight.orchestrator.submit(payload("booking-in-flight"));
+assert.equal(pendingRetry.pending, true);
+assert.equal(pendingRetry.opportunityId, null);
+assert.equal(inFlight.createCount, 0, "an active in-flight request must not race a second opportunity create");
+
+const deletedOpportunity = makeHarness();
+await deletedOpportunity.orchestrator.submit(categorizedSelectionPayload("booking-deleted-opportunity"));
+deletedOpportunity.opportunities.splice(0);
+const repairedSubmission = await deletedOpportunity.orchestrator.submit(
+  categorizedSelectionPayload("booking-deleted-opportunity"),
+);
+assert.equal(repairedSubmission.duplicate, true);
+assert.equal(repairedSubmission.repaired, true);
+assert.equal(repairedSubmission.opportunityId, "opportunity-2");
+assert.equal(deletedOpportunity.rows.get("booking-deleted-opportunity").opportunity_id, "opportunity-2");
+assert.equal(deletedOpportunity.opportunities[0].booking.addOns, "Virtual Twilight Photos - 1 Photo");
+assert.equal(deletedOpportunity.opportunities[0].booking.alaCarte, "Social Media Reel - 1 x 15-30sec Reel");
+
 const secondJob = await harness.orchestrator.submit(payload("booking-b", "456 New Job Blvd"));
 assert.equal(secondJob.opportunityId, "opportunity-2");
 assert.equal(harness.createCount, 2, "same contact with a new booking id must create a new opportunity");
+
+const deletedBeforeAppointment = makeHarness();
+await deletedBeforeAppointment.orchestrator.submit(payload("booking-deleted-before-appointment"));
+deletedBeforeAppointment.opportunities.splice(0);
+const repairedAppointment = await deletedBeforeAppointment.orchestrator.syncAppointment({
+  type: "AppointmentCreate",
+  appointment: {
+    id: "appointment-repair",
+    contactId: "contact-repeat",
+    calendarId: "calendarA",
+    assignedUserId: "brayden-user-id",
+    appointmentStatus: "new",
+    startTime: "2026-09-10T12:30:00-05:00",
+    endTime: "2026-09-10T14:00:00-05:00",
+  },
+});
+assert.equal(repairedAppointment.repaired, true);
+assert.equal(repairedAppointment.opportunityId, "opportunity-2");
+assert.equal(deletedBeforeAppointment.rows.get("booking-deleted-before-appointment").opportunity_id, "opportunity-2");
 
 // Keep one unbound booking for an exact appointment synchronization test.
 harness.rows.get("booking-b").contact_id = "contact-repeat";
