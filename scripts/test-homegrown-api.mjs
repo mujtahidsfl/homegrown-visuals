@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import bookingHandler, { submitWithSettling } from "../api/hgv-bookings.js";
 import appointmentHandler from "../api/hgv-ghl-webhook.js";
-import invoiceHandler, { extractInvoiceIdentifiers, resolveInvoiceSendMode } from "../api/hgv-invoice.js";
+import invoiceHandler, {
+  extractInvoiceIdentifiers,
+  resolveInvoiceRequestSendMode,
+  resolveInvoiceSendMode,
+} from "../api/hgv-invoice.js";
 import { createGhlClient } from "../api/_hgv/ghl.js";
 
 function makeReq(body, url, method = "POST", headers = {}) {
@@ -58,6 +62,15 @@ try {
   assert.equal(resolveInvoiceSendMode({}), "email");
   assert.equal(resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "draft" }), "draft");
   assert.equal(resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "SMS_AND_EMAIL" }), "sms_and_email");
+  assert.equal(
+    resolveInvoiceRequestSendMode({ no_charge_test: true }, "hgv-e2e-test-id", {}),
+    "draft",
+  );
+  assert.equal(
+    resolveInvoiceRequestSendMode({ no_charge_test: true }, "real-booking-id", {}),
+    "email",
+    "the draft override must never apply to a real booking id",
+  );
 
   let capturedContactBody;
   const phoneOnlyClient = createGhlClient({

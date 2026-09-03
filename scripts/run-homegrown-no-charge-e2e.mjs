@@ -184,11 +184,11 @@ try {
   }
 
   const invoice = E2E_BASE_URL
-    ? await requestPreview("/api/hgv-invoice", { website_booking_id: bookingId })
+    ? await requestPreview("/api/hgv-invoice", { website_booking_id: bookingId, no_charge_test: true })
     : await orchestrator.createInvoice({ bookingId, sendMode: "draft", dueDays: 7 });
   cleanup.invoiceId = invoice.invoiceId;
   const duplicateInvoice = E2E_BASE_URL
-    ? await requestPreview("/api/hgv-invoice", { website_booking_id: bookingId })
+    ? await requestPreview("/api/hgv-invoice", { website_booking_id: bookingId, no_charge_test: true })
     : await orchestrator.createInvoice({ bookingId, sendMode: "draft", dueDays: 7 });
   assert.equal(duplicateInvoice.duplicate, true);
   assert.equal(duplicateInvoice.invoiceId, invoice.invoiceId);
