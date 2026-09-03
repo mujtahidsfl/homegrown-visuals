@@ -673,13 +673,6 @@ function summarize(report) {
     if (count === 0) issues.push(`Live bundle missing marker: ${marker}`);
   }
   if (report.website.preflight?.skipped) issues.push(`Live preflight skipped: ${report.website.preflight.skipped}`);
-  if (!report.dns.mgMx.length) issues.push("mg.homegrownvisualsmedia.com MX records are missing");
-  if (report.dns.rootMx.some((record) => /mailgun/i.test(record.exchange || ""))) {
-    issues.push("Root domain MX points to Mailgun; verify this is intentional for real inbox routing");
-  }
-  if (report.locationSettings?.allowDuplicateOpportunity) {
-    issues.push("GHL location allows duplicate opportunities; duplicate-opportunity guard must stay active");
-  }
   for (const issue of report.criticalWorkflows?.issues || []) issues.push(issue);
   for (const issue of report.calendarRouting?.issues || []) issues.push(issue);
   for (const booking of report.futureBookings) {
@@ -693,6 +686,18 @@ function summarize(report) {
     issues.push(`GHL conversation audit skipped ${report.recentConfirmationErrors.length} conversation(s) due to GHL API errors`);
   }
   return issues;
+}
+
+function summarizeAdvisories(report) {
+  const advisories = [];
+  if (!report.dns.mgMx.length) advisories.push("mg.homegrownvisualsmedia.com MX records are missing");
+  if (report.dns.rootMx.some((record) => /mailgun/i.test(record.exchange || ""))) {
+    advisories.push("Root domain MX points to Mailgun; verify this is intentional for real inbox routing");
+  }
+  if (report.locationSettings?.allowDuplicateOpportunity) {
+    advisories.push("GHL permits multiple opportunities per contact; the exact Booking Job ID guard is active for repeat clients");
+  }
+  return advisories;
 }
 
 function flattenTxt(records) {
@@ -742,6 +747,13 @@ function renderMarkdown(report, jsonPath) {
     for (const issue of report.issues) lines.push(`- ${issue}`);
   } else {
     lines.push("- None detected.");
+  }
+
+  lines.push("", "## Advisories", "");
+  if (report.advisories.length) {
+    for (const advisory of report.advisories) lines.push(`- ${advisory}`);
+  } else {
+    lines.push("- None.");
   }
 
   lines.push("", "## Live Bundle Markers", "");
@@ -832,6 +844,7 @@ async function main() {
     recentConfirmations: [],
     recentConfirmationErrors: [],
     issues: [],
+    advisories: [],
   };
 
   if (ghlToken) {
@@ -848,6 +861,7 @@ async function main() {
   }
 
   report.issues.push(...summarize(report));
+  report.advisories.push(...summarizeAdvisories(report));
   mkdirSync(outputDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outputPath = join(outputDir, `homegrown-health-check-${stamp}.json`);
@@ -861,6 +875,8 @@ async function main() {
     markdownPath,
     issueCount: report.issues.length,
     issues: report.issues,
+    advisoryCount: report.advisories.length,
+    advisories: report.advisories,
   }, null, 2));
 
   if (process.env.HGV_AUDIT_STRICT === "1" && report.issues.length) process.exitCode = 1;

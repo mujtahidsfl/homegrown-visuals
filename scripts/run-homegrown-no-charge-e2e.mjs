@@ -157,6 +157,16 @@ try {
   assert.equal(duplicateBooking.duplicate, true);
   assert.equal(duplicateBooking.opportunityId, submitted.opportunityId);
 
+  await request(`/opportunities/${cleanup.opportunityId}`, { method: "DELETE" });
+  cleanup.opportunityId = "";
+  const recoveredBooking = E2E_BASE_URL
+    ? await requestPreview("/api/hgv-bookings", payload)
+    : await orchestrator.submit(payload);
+  assert.equal(recoveredBooking.duplicate, true);
+  assert.equal(recoveredBooking.repaired, true, "a deleted opportunity must be rebuilt from the Booking Job");
+  assert.ok(recoveredBooking.opportunityId);
+  cleanup.opportunityId = recoveredBooking.opportunityId;
+
   if (E2E_BASE_URL) {
     const appointment = await requestPreview("/api/hgv-ghl-webhook", {
       id: `hgv-appointment-${suffix}`,
@@ -170,7 +180,7 @@ try {
     });
     assert.equal(appointment.matched, true);
     assert.equal(appointment.bookingId, bookingId);
-    assert.equal(appointment.opportunityId, submitted.opportunityId);
+    assert.equal(appointment.opportunityId, cleanup.opportunityId);
   }
 
   const invoice = E2E_BASE_URL
@@ -183,7 +193,7 @@ try {
   assert.equal(duplicateInvoice.duplicate, true);
   assert.equal(duplicateInvoice.invoiceId, invoice.invoiceId);
 
-  const opportunity = (await request(`/opportunities/${submitted.opportunityId}`)).opportunity || {};
+  const opportunity = (await request(`/opportunities/${cleanup.opportunityId}`)).opportunity || {};
   const opportunityFields = new Map(
     (opportunity.customFields || []).map((field) => [
       field.id,
@@ -214,6 +224,7 @@ try {
     draftOnly: true,
     charged: false,
     duplicateBookingSuppressed: true,
+    deletedOpportunityRecoveryVerified: true,
     duplicateInvoiceSuppressed: true,
     previewApiVerified: Boolean(E2E_BASE_URL),
     appointmentReconciliationVerified: Boolean(E2E_BASE_URL),
