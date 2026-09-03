@@ -216,6 +216,33 @@ await topLevel.orchestrator.syncAppointment({
 assert.equal(topLevel.updates[0].changes.assignedTo, "dean-user-id");
 assert.equal(topLevel.updates[0].changes.customFields.length, 3);
 
+const workflowWebhook = makeHarness();
+await workflowWebhook.orchestrator.submit(payload("booking-workflow-webhook"));
+workflowWebhook.rows.get("booking-workflow-webhook").contact_id = "contact-repeat";
+const workflowScheduled = await workflowWebhook.orchestrator.syncAppointment({
+  type: "Appointment Status",
+  contact_id: "contact-repeat",
+  customData: {
+    id: "appointment-workflow-webhook",
+    assignedUserId: "brayden-user-id",
+    contactId: "contact-repeat",
+    appointmentStatus: "new",
+    startTime: "2026-09-13T12:30:00-05:00",
+    endTime: "2026-09-13T14:00:00-05:00",
+    title: "Repeat Client | 123 Current Job Ave",
+    address: "123 Current Job Ave",
+  },
+});
+assert.equal(workflowScheduled.matched, true, "GHL workflow customData must resolve the pending booking");
+assert.equal(workflowScheduled.appointmentId, "appointment-workflow-webhook");
+assert.equal(workflowWebhook.updates[0].changes.assignedTo, "brayden-user-id");
+const workflowFields = new Map(
+  workflowWebhook.updates[0].changes.customFields.map((field) => [field.id, field.fieldValue]),
+);
+assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingDate), "September 13, 2026");
+assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingStart), "12:30 PM");
+assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingEnd), "2:00 PM");
+
 const ambiguous = makeHarness();
 await ambiguous.orchestrator.submit(payload("booking-c"));
 await ambiguous.orchestrator.submit(payload("booking-d"));

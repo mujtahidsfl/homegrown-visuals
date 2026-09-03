@@ -140,9 +140,22 @@ export function normalizeBookingPayload(payload) {
 export function normalizeAppointmentWebhook(payload) {
   const source = asObject(payload);
   const appointment = asObject(source.appointment);
-  const type = asString(source.type);
-  const id = asString(appointment.id) || asString(source.id);
-  const contactId = asString(appointment.contactId) || asString(source.contactId);
+  const customData = asObject(source.customData);
+  const type = asString(source.type) || asString(customData.type);
+  const id =
+    asString(appointment.id) ||
+    asString(customData.id) ||
+    asString(customData.appointmentId) ||
+    asString(source.id) ||
+    asString(source.appointmentId) ||
+    asString(source.appointment_id);
+  const contactId =
+    asString(appointment.contactId) ||
+    asString(appointment.contact_id) ||
+    asString(customData.contactId) ||
+    asString(customData.contact_id) ||
+    asString(source.contactId) ||
+    asString(source.contact_id);
   if (!id) throw new Error("Missing appointment id");
   if (!contactId) throw new Error("Missing appointment contact id");
 
@@ -150,16 +163,57 @@ export function normalizeAppointmentWebhook(payload) {
     type,
     id,
     contactId,
-    title: asString(appointment.title) || asString(source.title),
-    address: asString(appointment.address) || asString(source.address),
-    calendarId: asString(appointment.calendarId) || asString(source.calendarId),
-    assignedUserId: asString(appointment.assignedUserId) || asString(source.assignedUserId),
-    status: asString(appointment.appointmentStatus) || asString(source.appointmentStatus),
-    startTime: asString(appointment.startTime) || asString(source.startTime),
-    endTime: asString(appointment.endTime) || asString(source.endTime),
+    title: asString(appointment.title) || asString(customData.title) || asString(source.title),
+    address:
+      asString(appointment.address) ||
+      asString(appointment.meetingLocation) ||
+      asString(customData.address) ||
+      asString(source.address),
+    calendarId:
+      asString(appointment.calendarId) ||
+      asString(appointment.calendar_id) ||
+      asString(customData.calendarId) ||
+      asString(customData.calendar_id) ||
+      asString(source.calendarId) ||
+      asString(source.calendar_id),
+    assignedUserId:
+      asString(appointment.assignedUserId) ||
+      asString(appointment.assigned_user_id) ||
+      asString(customData.assignedUserId) ||
+      asString(customData.assigned_user_id) ||
+      asString(source.assignedUserId) ||
+      asString(source.assigned_user_id),
+    status:
+      asString(appointment.appointmentStatus) ||
+      asString(appointment.appointment_status) ||
+      asString(customData.appointmentStatus) ||
+      asString(customData.appointment_status) ||
+      asString(source.appointmentStatus) ||
+      asString(source.appointment_status),
+    startTime:
+      asString(appointment.startTime) ||
+      asString(appointment.start_time) ||
+      asString(customData.startTime) ||
+      asString(customData.start_time) ||
+      asString(source.startTime) ||
+      asString(source.start_time),
+    endTime:
+      asString(appointment.endTime) ||
+      asString(appointment.end_time) ||
+      asString(customData.endTime) ||
+      asString(customData.end_time) ||
+      asString(source.endTime) ||
+      asString(source.end_time),
     deleted:
       /delete/i.test(type) ||
-      (asString(appointment.appointmentStatus) || asString(source.appointmentStatus)).toLowerCase() === "cancelled",
+      (
+        asString(appointment.appointmentStatus) ||
+        asString(appointment.appointment_status) ||
+        asString(customData.appointmentStatus) ||
+        asString(customData.appointment_status) ||
+        asString(source.appointmentStatus) ||
+        asString(source.appointment_status)
+      ).toLowerCase() === "cancelled",
     raw: source,
   };
 }
