@@ -85,6 +85,28 @@ function joinValues(value) {
   return Array.isArray(value) ? value.map(asString).filter(Boolean).join("\n") : asString(value);
 }
 
+function uniqueLines(...values) {
+  const seen = new Set();
+  const lines = [];
+  for (const value of values) {
+    const candidates = Array.isArray(value) ? value : asString(value).split(/\r?\n/);
+    for (const candidate of candidates) {
+      const line = asString(candidate);
+      const key = line.toLowerCase();
+      if (!line || seen.has(key)) continue;
+      seen.add(key);
+      lines.push(line);
+    }
+  }
+  return lines.join("\n");
+}
+
+function lineItemNames(lineItems, categoryPattern) {
+  return lineItems
+    .filter((item) => categoryPattern.test(item.category))
+    .map((item) => item.name);
+}
+
 export function normalizeBookingPayload(payload) {
   const source = asObject(payload);
   const property = asObject(source.property);
@@ -97,6 +119,21 @@ export function normalizeBookingPayload(payload) {
   const packageName = asString(source.package) || asString(source.package_name) || "A La Carte";
   const lineItems = normalizeLineItems(source);
   const bookingPath = asString(source.booking_path) || "legacy_package";
+  const structuredSelections = asObject(source.selections);
+  const addOns = uniqueLines(
+    source.addons,
+    source.add_ons,
+    structuredSelections.addons,
+    structuredSelections.add_ons,
+    lineItemNames(lineItems, /^add[\s-]*ons?$/i),
+  );
+  const alaCarte = uniqueLines(
+    source.ala_carte,
+    source.alaCarte,
+    structuredSelections.a_la_carte,
+    structuredSelections.ala_carte,
+    lineItemNames(lineItems, /^a\s*la\s*carte$/i),
+  );
 
   if (!bookingId) throw new Error("Missing website_booking_id");
   if (!contact.email && !contact.phone) throw new Error("Missing contact email or phone");
@@ -112,8 +149,8 @@ export function normalizeBookingPayload(payload) {
     propertyAddress,
     sqftTier: asString(source.sqft_tier) || asString(property.sqft_tier) || asString(source.sqft),
     selections: joinValues(source.selections),
-    addOns: joinValues(source.addons) || joinValues(source.selections),
-    alaCarte: asString(source.ala_carte) || (packageName.toLowerCase().includes("la carte") ? joinValues(source.selections) : ""),
+    addOns,
+    alaCarte,
     specialRequests: asString(source.special_requests),
     additionalInfo: asString(source.additional_info),
     editorNotes: asString(source.internal_notes_for_editor),

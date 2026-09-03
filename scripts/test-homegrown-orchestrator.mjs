@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createBookingOrchestrator } from "../api/_hgv/orchestrator.js";
 import { OPPORTUNITY_FIELD_IDS } from "../api/_hgv/config.js";
+import { normalizeBookingPayload } from "../api/_hgv/normalize.js";
 
 function payload(bookingId, address = "123 Current Job Ave") {
   return {
@@ -23,6 +24,23 @@ function discountedPayload(bookingId) {
     invoice_line_items: [
       { id: "standard", name: "Standard Package", amount: 453, quantity: 1 },
       { id: "video_order_discount", name: "10% Video Order Discount", amount: -45.3, quantity: 1 },
+    ],
+  };
+}
+
+function categorizedSelectionPayload(bookingId) {
+  return {
+    ...payload(bookingId),
+    package: "Zillow Showcase Package",
+    selections: {
+      a_la_carte: ["Social Media Reel - 1 x 15-30sec Reel"],
+      twilight_option: "Virtual Twilight Photos - 1 Photo",
+    },
+    invoice_line_items: [
+      { id: "zillow", name: "Zillow Showcase Package", category: "Package", amount: 479, quantity: 1 },
+      { id: "twilight", name: "Virtual Twilight Photos - 1 Photo", category: "Add-Ons", amount: 29, quantity: 1 },
+      { id: "reel", name: "Social Media Reel - 1 x 15-30sec Reel", category: "A La Carte", amount: 389, quantity: 1 },
+      { id: "discount", name: "10% Video Order Discount", category: "Discount", amount: -39, quantity: 1 },
     ],
   };
 }
@@ -242,6 +260,12 @@ const workflowFields = new Map(
 assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingDate), "September 13, 2026");
 assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingStart), "12:30 PM");
 assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingEnd), "2:00 PM");
+
+const categorizedSelections = normalizeBookingPayload(
+  categorizedSelectionPayload("booking-categorized-selections"),
+);
+assert.equal(categorizedSelections.addOns, "Virtual Twilight Photos - 1 Photo");
+assert.equal(categorizedSelections.alaCarte, "Social Media Reel - 1 x 15-30sec Reel");
 
 const ambiguous = makeHarness();
 await ambiguous.orchestrator.submit(payload("booking-c"));
