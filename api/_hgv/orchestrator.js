@@ -62,7 +62,15 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
     }
 
     if (!opportunity) {
-      opportunity = await ghl.findOpportunityByBookingId(contactId, booking.bookingId);
+      const searchMatch = await ghl.findOpportunityByBookingId(contactId, booking.bookingId);
+      if (searchMatch?.id) {
+        try {
+          opportunity = await ghl.getOpportunity(searchMatch.id);
+        } catch (error) {
+          if (!isNotFound(error)) throw error;
+        }
+        if (opportunity && !opportunityMatchesBooking(opportunity, booking.bookingId)) opportunity = null;
+      }
     }
     if (!opportunity) {
       opportunity = await ghl.createOpportunity({

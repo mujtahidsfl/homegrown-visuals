@@ -159,6 +159,7 @@ function makeHarness() {
     invoices,
     sentInvoices,
     contactUpserts,
+    ghl,
     get createCount() { return createCount; },
     orchestrator: createBookingOrchestrator({ ledger, ghl, requestIdFactory: () => "00000000-0000-4000-8000-000000000001" }),
   };
@@ -197,6 +198,17 @@ assert.equal(repairedSubmission.opportunityId, "opportunity-2");
 assert.equal(deletedOpportunity.rows.get("booking-deleted-opportunity").opportunity_id, "opportunity-2");
 assert.equal(deletedOpportunity.opportunities[0].booking.addOns, "Virtual Twilight Photos - 1 Photo");
 assert.equal(deletedOpportunity.opportunities[0].booking.alaCarte, "Social Media Reel - 1 x 15-30sec Reel");
+
+const staleDeletedOpportunity = makeHarness();
+await staleDeletedOpportunity.orchestrator.submit(payload("booking-stale-deleted-opportunity"));
+const staleSearchResult = staleDeletedOpportunity.opportunities[0];
+staleDeletedOpportunity.opportunities.splice(0);
+staleDeletedOpportunity.ghl.findOpportunityByBookingId = async () => staleSearchResult;
+const staleSearchRepair = await staleDeletedOpportunity.orchestrator.submit(
+  payload("booking-stale-deleted-opportunity"),
+);
+assert.equal(staleSearchRepair.repaired, true, "a stale GHL search result must not block deleted opportunity recovery");
+assert.equal(staleSearchRepair.opportunityId, "opportunity-2");
 
 const secondJob = await harness.orchestrator.submit(payload("booking-b", "456 New Job Blvd"));
 assert.equal(secondJob.opportunityId, "opportunity-2");
