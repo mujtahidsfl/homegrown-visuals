@@ -328,6 +328,30 @@ assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingDate), "September 1
 assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingStart), "12:30 PM");
 assert.equal(workflowFields.get(OPPORTUNITY_FIELD_IDS.meetingEnd), "2:00 PM");
 
+const humanTimeWebhook = makeHarness();
+await humanTimeWebhook.orchestrator.submit(payload("booking-human-time-webhook"));
+humanTimeWebhook.rows.get("booking-human-time-webhook").contact_id = "contact-repeat";
+await humanTimeWebhook.orchestrator.syncAppointment({
+  type: "Appointment Status",
+  contact_id: "contact-repeat",
+  customData: {
+    id: "appointment-human-time-webhook",
+    assignedUserId: "dean-user-id",
+    contactId: "contact-repeat",
+    appointmentStatus: "confirmed",
+    startTime: "Thursday, September 10, 2026 10:00 AM",
+    endTime: "Thursday, September 10, 2026 11:30 AM",
+    title: "Human Time Client | 123 Current Job Ave",
+    address: "123 Current Job Ave",
+  },
+});
+const humanTimeFields = new Map(
+  humanTimeWebhook.updates[0].changes.customFields.map((field) => [field.id, field.fieldValue]),
+);
+assert.equal(humanTimeFields.get(OPPORTUNITY_FIELD_IDS.meetingDate), "September 10, 2026");
+assert.equal(humanTimeFields.get(OPPORTUNITY_FIELD_IDS.meetingStart), "10:00 AM");
+assert.equal(humanTimeFields.get(OPPORTUNITY_FIELD_IDS.meetingEnd), "11:30 AM");
+
 const categorizedSelections = normalizeBookingPayload(
   categorizedSelectionPayload("booking-categorized-selections"),
 );

@@ -35,6 +35,55 @@ function invoiceDiscount(lineItems) {
   return value > 0 ? { type: "fixed", value: Math.round(value * 100) / 100 } : null;
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function appointmentParts(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { date: "", time: "" };
+
+  const human = raw.match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*([AP]M))?/i,
+  );
+  if (human) {
+    const month = MONTH_NAMES.find((name) => name.toLowerCase() === human[1].toLowerCase()) || human[1];
+    return {
+      date: `${month} ${Number(human[2])}, ${human[3]}`,
+      time: human[4] ? `${Number(human[4])}:${human[5]} ${human[6].toUpperCase()}` : "",
+    };
+  }
+
+  const localIso = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  if (localIso) {
+    return {
+      date: `${MONTH_NAMES[Number(localIso[2]) - 1]} ${Number(localIso[3])}, ${localIso[1]}`,
+      time: new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "UTC",
+      }).format(new Date(Date.UTC(2000, 0, 1, Number(localIso[4]), Number(localIso[5])))),
+    };
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.valueOf())) return { date: "", time: "" };
+  return {
+    date: new Intl.DateTimeFormat("en-US", {
+      timeZone: HGV_TIME_ZONE,
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(date),
+    time: new Intl.DateTimeFormat("en-US", {
+      timeZone: HGV_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date),
+  };
+}
+
 export function bookingCustomFields(booking) {
   return [
     customField(OPPORTUNITY_FIELD_IDS.websiteBookingId, booking.bookingId),
@@ -60,24 +109,13 @@ export function bookingCustomFields(booking) {
 }
 
 export function appointmentCustomFields(appointment) {
-  const start = appointment.startTime ? new Date(appointment.startTime) : null;
-  const end = appointment.endTime ? new Date(appointment.endTime) : null;
-  const dateFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: HGV_TIME_ZONE,
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  const timeFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: HGV_TIME_ZONE,
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const start = appointmentParts(appointment.startTime);
+  const end = appointmentParts(appointment.endTime);
 
   return [
-    customField(OPPORTUNITY_FIELD_IDS.meetingDate, start && !Number.isNaN(start.valueOf()) ? dateFormatter.format(start) : ""),
-    customField(OPPORTUNITY_FIELD_IDS.meetingStart, start && !Number.isNaN(start.valueOf()) ? timeFormatter.format(start) : ""),
-    customField(OPPORTUNITY_FIELD_IDS.meetingEnd, end && !Number.isNaN(end.valueOf()) ? timeFormatter.format(end) : ""),
+    customField(OPPORTUNITY_FIELD_IDS.meetingDate, start.date),
+    customField(OPPORTUNITY_FIELD_IDS.meetingStart, start.time),
+    customField(OPPORTUNITY_FIELD_IDS.meetingEnd, end.time),
   ].filter(Boolean);
 }
 
