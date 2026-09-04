@@ -175,8 +175,8 @@ try {
       appointmentStatus: "new",
       title: "HGV No Charge Test Appointment",
       address: propertyAddress,
-      startTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(),
+      startTime: "Thursday, September 10, 2026 10:00 AM",
+      endTime: "Thursday, September 10, 2026 11:30 AM",
     });
     assert.equal(appointment.matched, true);
     assert.equal(appointment.bookingId, bookingId);
@@ -202,7 +202,12 @@ try {
   );
   assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.websiteBookingId), bookingId);
   assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.propertyAddress), propertyAddress);
-  if (E2E_BASE_URL) assert.equal(opportunity.pipelineStageId, HGV_STAGE_IDS.awaitingConfirmation);
+  if (E2E_BASE_URL) {
+    assert.equal(opportunity.pipelineStageId, HGV_STAGE_IDS.awaitingConfirmation);
+    assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.meetingDate), "September 10, 2026");
+    assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.meetingStart), "10:00 AM");
+    assert.equal(opportunityFields.get(OPPORTUNITY_FIELD_IDS.meetingEnd), "11:30 AM");
+  }
 
   const invoiceRecord = await request(
     `/invoices/${invoice.invoiceId}?altId=${encodeURIComponent(locationId)}&altType=location`,
