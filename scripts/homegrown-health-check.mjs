@@ -483,7 +483,8 @@ async function auditInvoice(job) {
   if (Number.isFinite(expectedTotal) && Math.abs(Number(invoice.total) - expectedTotal) > 0.01) {
     risks.push(`invoice total ${invoice.total} does not match booking total ${expectedTotal}`);
   }
-  if (job.invoice_status === "sent" && invoice.status !== "sent") {
+  const invoiceAdvancedFromSent = job.invoice_status === "sent" && invoice.status === "paid";
+  if (job.invoice_status === "sent" && invoice.status !== "sent" && !invoiceAdvancedFromSent) {
     risks.push(`Booking Job says invoice sent but GHL invoice is ${invoice.status || "unknown"}`);
   }
   if (Number(invoice.amountPaid || 0) > Number(invoice.total || 0)) {
