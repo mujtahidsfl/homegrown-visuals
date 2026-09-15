@@ -61,7 +61,11 @@ try {
   );
   assert.equal(resolveInvoiceSendMode({}), "email");
   assert.equal(resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "draft" }), "draft");
-  assert.equal(resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "SMS_AND_EMAIL" }), "sms_and_email");
+  assert.equal(
+    resolveInvoiceSendMode({ HGV_INVOICE_AUTOSEND_MODE: "SMS_AND_EMAIL" }),
+    "email",
+    "invoice delivery must remain email-only even if a stale environment value requests SMS",
+  );
   assert.equal(
     resolveInvoiceRequestSendMode({ no_charge_test: true }, "hgv-e2e-test-id", {}),
     "draft",
@@ -92,6 +96,38 @@ try {
   });
   assert.equal(capturedContactBody.phone, "+15555550100");
   assert.equal("email" in capturedContactBody, false);
+
+  let capturedInvoiceBody;
+  const invoiceClient = createGhlClient({
+    token: "test-token",
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/invoices/settings")) return new Response(JSON.stringify({ title: "INVOICE" }));
+      if (path.endsWith("/locations/pwyt4yVmaVxmQpVX040D")) {
+        return new Response(JSON.stringify({ location: { name: "Homegrown Visuals" } }));
+      }
+      if (path.endsWith("/invoices/generate-invoice-number")) {
+        return new Response(JSON.stringify({ invoiceNumber: "TEST-1" }));
+      }
+      if (path.endsWith("/invoices/")) {
+        capturedInvoiceBody = JSON.parse(options.body);
+        return new Response(JSON.stringify({ invoice: { _id: "invoice-test", status: "draft" } }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ message: "Not found" }), { status: 404 });
+    },
+  });
+  await invoiceClient.createInvoiceDraft({
+    contactId: "contact-test",
+    booking: {
+      bookingId: "booking-email-only",
+      packageName: "Standard Package",
+      propertyAddress: "123 Email Only Ave",
+      contact: { fullName: "Email Only", email: "client@example.com", phone: "+15555550100" },
+      lineItems: [{ name: "Standard Package", category: "Package", amount: 279, quantity: 1 }],
+    },
+  });
+  assert.deepEqual(capturedInvoiceBody.sentTo.email, ["client@example.com"]);
+  assert.deepEqual(capturedInvoiceBody.sentTo.phoneNo, [], "invoice delivery targets must never include SMS");
 
   process.env.HGV_ORCHESTRATOR_MODE = "off";
   process.env.HGV_GHL_WEBHOOK_SECRET = "test-webhook-secret";

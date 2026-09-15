@@ -667,6 +667,31 @@ async function checkLocationSettings() {
   };
 }
 
+async function checkInvoiceDeliverySettings() {
+  const query = new URLSearchParams({ altId: locationId, altType: "location" });
+  const settings = await ghlRequest(`/invoices/settings?${query}`);
+  const reminders = settings.reminderSettings?.reminders || [];
+  const invoices = (await ghlRequest(`/invoices/?${query}&limit=100&offset=0`)).invoices || [];
+  const hgvInvoices = invoices.filter((invoice) => /^\[HGV:[^\]]+]/.test(String(invoice.name || "")));
+  const statusCounts = {};
+  for (const invoice of hgvInvoices) {
+    const status = String(invoice.status || "unknown");
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  }
+  return {
+    initialInvoiceNotificationEnabled: settings.customNotification?.customerSendInvoice?.enabled === true,
+    paymentReceiptEnabled: settings.customNotification?.customerPaymentSuccess?.enabled === true,
+    reminders: reminders.map((reminder) => ({
+      name: reminder.reminderName,
+      enabled: reminder.enabled === true,
+      condition: reminder.reminderInvoiceCondition,
+      timing: reminder.reminderTime,
+    })),
+    trackedHgvInvoiceCount: hgvInvoices.length,
+    statusCounts,
+  };
+}
+
 function summarize(report) {
   const issues = [];
   if (report.website.status !== 200) issues.push(`Live services page returned ${report.website.status}`);
@@ -685,6 +710,15 @@ function summarize(report) {
   }
   if (report.recentConfirmationErrors?.length) {
     issues.push(`GHL conversation audit skipped ${report.recentConfirmationErrors.length} conversation(s) due to GHL API errors`);
+  }
+  if (!report.invoiceDelivery?.initialInvoiceNotificationEnabled) {
+    issues.push("GHL initial invoice email notification is disabled");
+  }
+  if (!report.invoiceDelivery?.paymentReceiptEnabled) {
+    issues.push("GHL customer payment receipt is disabled");
+  }
+  for (const reminder of report.invoiceDelivery?.reminders || []) {
+    if (reminder.enabled) issues.push(`GHL invoice reminder is enabled and may send SMS: ${reminder.name}`);
   }
   return issues;
 }
@@ -739,6 +773,10 @@ function renderMarkdown(report, jsonPath) {
     `- Future appointments checked: ${report.futureBookings.length}`,
     `- Recent confirmation messages checked: ${report.recentConfirmations.length}`,
     `- Recent conversation fetch errors: ${report.recentConfirmationErrors?.length ?? 0}`,
+    `- GHL invoices tracked: ${report.invoiceDelivery?.trackedHgvInvoiceCount ?? "not checked"} (${JSON.stringify(report.invoiceDelivery?.statusCounts || {})})`,
+    `- Initial invoice email enabled: ${report.invoiceDelivery?.initialInvoiceNotificationEnabled ?? "unknown"}`,
+    `- Payment receipt enabled: ${report.invoiceDelivery?.paymentReceiptEnabled ?? "unknown"}`,
+    `- Automatic invoice reminders enabled: ${(report.invoiceDelivery?.reminders || []).filter((reminder) => reminder.enabled).length}`,
     "",
     "## Issues",
     "",
@@ -839,6 +877,7 @@ async function main() {
     website: await checkWebsite(),
     dns: await checkDns(),
     locationSettings: null,
+    invoiceDelivery: null,
     criticalWorkflows: null,
     calendarRouting: null,
     futureBookings: [],
@@ -850,6 +889,7 @@ async function main() {
 
   if (ghlToken) {
     report.locationSettings = await checkLocationSettings();
+    report.invoiceDelivery = await checkInvoiceDeliverySettings();
     report.criticalWorkflows = checkCriticalWorkflows(await getWorkflows());
     const calendars = await getCalendars();
     report.calendarRouting = checkCalendarRouting(calendars);

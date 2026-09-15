@@ -78,6 +78,15 @@ function appointmentMatchesAddress(row, appointment) {
   return appointmentText.includes(bookingAddress);
 }
 
+function uniquelyNewest(rows) {
+  const ranked = rows
+    .map((row) => ({ row, submittedAt: Date.parse(row.submitted_at || row.payload?.submittedAt || "") }))
+    .filter((candidate) => Number.isFinite(candidate.submittedAt))
+    .sort((a, b) => b.submittedAt - a.submittedAt);
+  if (!ranked.length || ranked[0].submittedAt === ranked[1]?.submittedAt) return null;
+  return ranked[0].row;
+}
+
 function isUniqueBookingConflict(error) {
   return error?.status === 400 && /same value for Website Booking ID/i.test(error.message);
 }
@@ -270,7 +279,11 @@ export function createGhlObjectLedger({
           const row = addressMatches[0];
           return rowFromRecord(await updateRecord(row.record_id, { appointment_id: appointment.id }));
         }
-        if (addressMatches.length > 1) return null;
+        if (addressMatches.length > 1) {
+          const row = uniquelyNewest(addressMatches);
+          if (!row) return null;
+          return rowFromRecord(await updateRecord(row.record_id, { appointment_id: appointment.id }));
+        }
         if (candidates.length > 1) return null;
         if (candidates.length === 1) {
           const row = candidates[0];

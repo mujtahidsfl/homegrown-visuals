@@ -150,6 +150,32 @@ const addressMatched = await ledger.claimAppointment({
 });
 assert.equal(addressMatched.booking_id, "booking-b", "the appointment address must select the correct repeat-client job");
 
+const sameAddressOlder = booking("booking-same-address-older", "789 Repeat Property Rd");
+sameAddressOlder.submittedAt = "2026-09-01T12:10:00.000Z";
+const sameAddressNewer = booking("booking-same-address-newer", "789 Repeat Property Rd");
+sameAddressNewer.submittedAt = "2026-09-01T12:20:00.000Z";
+const olderClaim = await ledger.claimBooking(sameAddressOlder, "request-same-address-1");
+const newerClaim = await ledger.claimBooking(sameAddressNewer, "request-same-address-2");
+await ledger.completeBooking(sameAddressOlder.bookingId, {
+  contact_id: "contact-same-address",
+  opportunity_id: "opportunity-same-address-older",
+}, olderClaim.record_id);
+await ledger.completeBooking(sameAddressNewer.bookingId, {
+  contact_id: "contact-same-address",
+  opportunity_id: "opportunity-same-address-newer",
+}, newerClaim.record_id);
+const newestSameAddress = await ledger.claimAppointment({
+  id: "appointment-same-address",
+  contactId: "contact-same-address",
+  calendarId: "calendar-a",
+  title: "Repeat Client | 789 Repeat Property Rd",
+});
+assert.equal(
+  newestSameAddress.booking_id,
+  "booking-same-address-newer",
+  "same-client same-address resubmissions must attach to the uniquely newest pending booking",
+);
+
 await ledger.updateAppointment("booking-a", {
   id: "appointment-a",
   calendarId: "calendar-a",

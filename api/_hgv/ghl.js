@@ -299,7 +299,7 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
             email: booking.contact.email ? [booking.contact.email] : [],
             emailCc: [],
             emailBcc: [],
-            phoneNo: booking.contact.phone ? [booking.contact.phone] : [],
+            phoneNo: [],
           },
           liveMode: true,
           automaticTaxesEnabled: false,
