@@ -311,6 +311,9 @@ export function createGhlObjectLedger({
       if (!record) return null;
       const row = rowFromRecord(record);
       if (row.invoice_id) return { acquired: false, ...row };
+      if (!row.appointment_id || !row.appointment_start || !row.appointment_end) {
+        return { acquired: false, reason: "missing_appointment", ...row };
+      }
       if (row.invoice_status === "processing" && !isExpired(row.invoice_lease_expires_at, now())) {
         return { acquired: false, ...row };
       }

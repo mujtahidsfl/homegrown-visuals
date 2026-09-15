@@ -135,6 +135,15 @@ await ledger.completeBooking("booking-b", {
   opportunity_id: "opportunity-b",
 });
 
+const unscheduledInvoiceClaim = await ledger.claimInvoice("booking-b", "invoice-request-unscheduled");
+assert.equal(unscheduledInvoiceClaim.acquired, false);
+assert.equal(unscheduledInvoiceClaim.reason, "missing_appointment");
+assert.equal(
+  unscheduledInvoiceClaim.invoice_status,
+  null,
+  "an unscheduled booking must not take an invoice processing lease",
+);
+
 const ambiguous = await ledger.claimAppointment({
   id: "appointment-ambiguous",
   contactId: "contact-repeat",

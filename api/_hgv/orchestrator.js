@@ -216,6 +216,15 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
       const claim = await ledger.claimInvoice(bookingId, requestIdFactory());
       if (!claim) throw new Error("No booking ledger row matched this invoice request");
       if (!claim.acquired) {
+        if (claim.reason === "missing_appointment") {
+          return {
+            ok: true,
+            skipped: true,
+            bookingId,
+            invoiceId: null,
+            status: "waiting_for_appointment",
+          };
+        }
         return {
           ok: true,
           duplicate: true,

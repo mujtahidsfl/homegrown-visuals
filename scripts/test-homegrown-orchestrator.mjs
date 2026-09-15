@@ -94,6 +94,9 @@ function makeHarness() {
       const row = rows.get(bookingId);
       if (!row) return null;
       if (row.invoice_id) return { acquired: false, ...row };
+      if (!row.appointment_id || !row.appointment_start || !row.appointment_end) {
+        return { acquired: false, reason: "missing_appointment", ...row };
+      }
       if (row.invoice_status === "processing") return { acquired: false, ...row };
       row.invoice_status = "processing";
       return { acquired: true, ...row };
@@ -375,7 +378,12 @@ await invoiceHarness.orchestrator.submit({
   ...discountedPayload("booking-invoice"),
   property_address: "9911 Itemized Invoice Ave",
 });
-invoiceHarness.rows.get("booking-invoice").assigned_user_id = "dean-user-id";
+Object.assign(invoiceHarness.rows.get("booking-invoice"), {
+  appointment_id: "appointment-invoice",
+  appointment_start: "2026-09-10T10:00:00-05:00",
+  appointment_end: "2026-09-10T11:30:00-05:00",
+  assigned_user_id: "dean-user-id",
+});
 const draftInvoice = await invoiceHarness.orchestrator.createInvoice({
   bookingId: "booking-invoice",
   sendMode: "draft",
@@ -402,6 +410,11 @@ assert.equal(invoiceHarness.sentInvoices.length, 0, "draft mode must not email, 
 const compactLedgerHarness = makeHarness();
 await compactLedgerHarness.orchestrator.submit(payload("booking-compact-ledger"));
 const compactRow = compactLedgerHarness.rows.get("booking-compact-ledger");
+Object.assign(compactRow, {
+  appointment_id: "appointment-compact-ledger",
+  appointment_start: "2026-09-10T10:00:00-05:00",
+  appointment_end: "2026-09-10T11:30:00-05:00",
+});
 compactRow.payload = {
   ...compactRow.payload,
   bookingId: "booking-compact-ledger",
@@ -431,6 +444,11 @@ assert.equal(
 const recoveryHarness = makeHarness();
 await recoveryHarness.orchestrator.submit(payload("booking-recovery"));
 const recoveredBooking = recoveryHarness.rows.get("booking-recovery");
+Object.assign(recoveredBooking, {
+  appointment_id: "appointment-recovery",
+  appointment_start: "2026-09-10T10:00:00-05:00",
+  appointment_end: "2026-09-10T11:30:00-05:00",
+});
 recoveryHarness.invoices.push({
   id: "invoice-existing",
   status: "draft",
@@ -448,11 +466,32 @@ assert.equal(recoveryHarness.invoices.length, 1);
 
 const sendHarness = makeHarness();
 await sendHarness.orchestrator.submit(payload("booking-send"));
-sendHarness.rows.get("booking-send").assigned_user_id = "dean-user-id";
+Object.assign(sendHarness.rows.get("booking-send"), {
+  appointment_id: "appointment-send",
+  appointment_start: "2026-09-10T10:00:00-05:00",
+  appointment_end: "2026-09-10T11:30:00-05:00",
+  assigned_user_id: "dean-user-id",
+});
 await sendHarness.orchestrator.createInvoice({ bookingId: "booking-send", sendMode: "email", dueDays: 7 });
 assert.deepEqual(sendHarness.sentInvoices[0], {
   id: "invoice-1",
   options: { userId: "dean-user-id", action: "email" },
 });
+
+const unscheduledHarness = makeHarness();
+await unscheduledHarness.orchestrator.submit(payload("booking-unscheduled"));
+const unscheduledInvoice = await unscheduledHarness.orchestrator.createInvoice({
+  bookingId: "booking-unscheduled",
+  sendMode: "email",
+  dueDays: 7,
+});
+assert.deepEqual(unscheduledInvoice, {
+  ok: true,
+  skipped: true,
+  bookingId: "booking-unscheduled",
+  invoiceId: null,
+  status: "waiting_for_appointment",
+});
+assert.equal(unscheduledHarness.invoices.length, 0, "an unscheduled booking must never create or send an invoice");
 
 console.log("Homegrown orchestrator tests passed");
