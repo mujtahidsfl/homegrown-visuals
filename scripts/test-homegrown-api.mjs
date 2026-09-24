@@ -99,12 +99,22 @@ try {
 
   let capturedInvoiceBody;
   let capturedSentInvoiceBody;
+  let capturedInvoiceDeliveryBody;
   const invoiceClient = createGhlClient({
     token: "test-token",
     fetchImpl: async (url, options = {}) => {
       const parsedUrl = new URL(url);
       const path = parsedUrl.pathname;
-      if (parsedUrl.hostname === "invoice.example.com") return new Response(null, { status: 302 });
+      if (parsedUrl.hostname === "invoice.example.com") {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "https://pay.example.com/invoices/invoice-sent-test" },
+        });
+      }
+      if (parsedUrl.hostname === "pay.example.com") return new Response("Payment page", { status: 200 });
+      if (parsedUrl.hostname === "link.fastpaydirect.com" && path.startsWith("/invoice/")) {
+        return new Response("Canonical invoice page", { status: 200 });
+      }
       if (path.endsWith("/invoices/settings")) return new Response(JSON.stringify({ title: "INVOICE" }));
       if (path.endsWith("/locations/pwyt4yVmaVxmQpVX040D")) {
         return new Response(JSON.stringify({ location: { name: "Homegrown Visuals" } }));
@@ -119,9 +129,18 @@ try {
       if (path.endsWith("/invoices/text2pay")) {
         capturedSentInvoiceBody = JSON.parse(options.body);
         return new Response(JSON.stringify({
-          invoice: { _id: "invoice-sent-test", status: "sent" },
+          invoice: {
+            _id: "invoice-sent-test",
+            status: "sent",
+            invoiceNumberPrefix: "INV-",
+            invoiceNumber: "TEST-2",
+          },
           invoiceUrl: "https://invoice.example.com/pay/invoice-sent-test",
         }));
+      }
+      if (path.endsWith("/conversations/messages")) {
+        capturedInvoiceDeliveryBody = JSON.parse(options.body);
+        return new Response(JSON.stringify({ messageId: "invoice-email-message-test" }));
       }
       return new Response(JSON.stringify({ message: "Not found" }), { status: 404 });
     },
@@ -154,9 +173,28 @@ try {
   assert.equal(capturedSentInvoiceBody.action, "send");
   assert.equal(capturedSentInvoiceBody.userId, "sender-test");
   assert.equal(capturedSentInvoiceBody.includeTermsNote, true);
-  assert.deepEqual(capturedSentInvoiceBody.sentTo.email, ["client@example.com"]);
+  assert.deepEqual(capturedSentInvoiceBody.sentTo.email, []);
   assert.deepEqual(capturedSentInvoiceBody.sentTo.phoneNo, []);
   assert.deepEqual(capturedSentInvoiceBody.items.map((item) => item.name), ["Standard Package"]);
+  assert.equal(capturedInvoiceDeliveryBody.type, "Email");
+  assert.equal(capturedInvoiceDeliveryBody.status, "pending");
+  assert.equal(capturedInvoiceDeliveryBody.contactId, "contact-test");
+  assert.equal(capturedInvoiceDeliveryBody.emailTo, "client@example.com");
+  assert.match(capturedInvoiceDeliveryBody.subject, /INV-TEST-2/);
+  assert.match(capturedInvoiceDeliveryBody.html, /https:\/\/link\.fastpaydirect\.com\/invoice\/invoice-sent-test/);
+
+  await invoiceClient.createInvoicePaymentDraft({
+    contactId: "contact-test",
+    userId: "sender-test",
+    booking: {
+      bookingId: "booking-payment-draft",
+      packageName: "Standard Package",
+      propertyAddress: "123 Email Only Ave",
+      contact: { fullName: "Email Only", email: "client@example.com", phone: "+15555550100" },
+      lineItems: [{ name: "Standard Package", category: "Package", amount: 279, quantity: 1 }],
+    },
+  });
+  assert.equal(capturedSentInvoiceBody.action, "draft");
 
   process.env.HGV_ORCHESTRATOR_MODE = "off";
   process.env.HGV_GHL_WEBHOOK_SECRET = "test-webhook-secret";

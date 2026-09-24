@@ -10,7 +10,7 @@ const locationId = process.env.GHL_LOCATION_ID || "pwyt4yVmaVxmQpVX040D";
 const liveUrl = "https://www.homegrownvisualsmedia.com";
 const ghlBaseUrl = "https://services.leadconnectorhq.com";
 const ghlVersion = "2021-07-28";
-const sinceDefault = "2026-09-01T00:00:00-05:00";
+const sinceDefault = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 const bookingObjectKey = process.env.HGV_GHL_BOOKING_OBJECT_KEY || "custom_objects.booking_jobs";
 const servicesFlowPath = join(repoRoot, "src", "app", "components", "ServicesBookingFlow.tsx");
 
@@ -704,7 +704,9 @@ async function checkInvoiceDeliverySettings() {
       let paymentUrl = null;
       for (const conversation of conversations) {
         const body = await ghlGet(`/conversations/${conversation.id}/messages?limit=100`);
-        const messages = body.messages?.messages || [];
+        const messages = [...(body.messages?.messages || [])].sort(
+          (left, right) => Date.parse(right.dateAdded || 0) - Date.parse(left.dateAdded || 0),
+        );
         for (const message of messages) {
           const messageBody = String(message.body || "");
           if (
@@ -717,7 +719,10 @@ async function checkInvoiceDeliverySettings() {
             .map((url) => url.replace(/&amp;/g, "&"))
             .find((url) => {
               try {
-                return new URL(url).hostname === "link.fastpaydirect.com";
+                const parsed = new URL(url);
+                return parsed.hostname === "fastpaydirect.com"
+                  || parsed.hostname.endsWith(".fastpaydirect.com")
+                  || /invoice/i.test(parsed.pathname);
               } catch {
                 return false;
               }

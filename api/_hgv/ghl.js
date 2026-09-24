@@ -28,6 +28,15 @@ function dateOnly(date) {
   return date.toISOString().slice(0, 10);
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function invoiceDiscount(lineItems) {
   const value = Math.abs(
     lineItems.filter((item) => item.amount < 0).reduce((total, item) => total + item.amount * item.quantity, 0),
@@ -220,6 +229,44 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
     };
   }
 
+  async function text2PayInvoice({ booking, contactId, dueDays = 7, userId, invoiceId = "", action }) {
+    if (!userId) throw new Error("Missing invoice sender user id");
+    if (!["draft", "send"].includes(action)) throw new Error("Invalid Text2Pay invoice action");
+    const payload = await invoicePayload({ booking, contactId, dueDays, invoiceId });
+    const body = await request("/invoices/text2pay", {
+      method: "POST",
+      body: {
+        ...payload,
+        ...(action === "send"
+          ? { sentTo: { email: [], emailCc: [], emailBcc: [], phoneNo: [] } }
+          : {}),
+        includeTermsNote: true,
+        action,
+        userId,
+      },
+    });
+    const invoice = body.invoice || {};
+    const id = invoice._id || invoice.id || invoiceId;
+    if (!id) {
+      throw new Error("GHL Text2Pay returned an invalid invoice response");
+    }
+    const canonicalInvoiceUrl = new URL(`/invoice/${encodeURIComponent(id)}`, "https://link.fastpaydirect.com");
+    const paymentPage = await fetchImpl(canonicalInvoiceUrl, {
+      method: "GET",
+      redirect: "manual",
+      headers: { "User-Agent": "Homegrown-Invoice-Verification/1.0" },
+    });
+    if (paymentPage.status < 200 || paymentPage.status >= 400) {
+      throw new Error(`GHL returned an unusable canonical invoice URL (HTTP ${paymentPage.status})`);
+    }
+    return {
+      ...invoice,
+      id,
+      status: invoice.status === "paid" ? "paid" : action === "send" ? "sent" : "draft",
+      invoiceUrl: canonicalInvoiceUrl.toString(),
+    };
+  }
+
   return {
     async getOpportunity(opportunityId) {
       const body = await request(`/opportunities/${opportunityId}`);
@@ -328,42 +375,47 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
     },
 
     async createAndSendInvoice({ booking, contactId, dueDays = 7, userId, invoiceId = "" }) {
-      if (!userId) throw new Error("Missing invoice sender user id");
-      const payload = await invoicePayload({ booking, contactId, dueDays, invoiceId });
-      const body = await request("/invoices/text2pay", {
+      if (!booking.contact.email) throw new Error("Invoice contact is missing an email address");
+      const invoice = await text2PayInvoice({
+        booking,
+        contactId,
+        dueDays,
+        userId,
+        invoiceId,
+        action: "send",
+      });
+      const invoiceNumber = `${invoice.invoiceNumberPrefix || ""}${invoice.invoiceNumber || ""}`;
+      const safeName = escapeHtml(booking.contact.firstName || booking.contact.fullName || "there");
+      const safeNumber = escapeHtml(invoiceNumber || "your invoice");
+      const safeAddress = escapeHtml(booking.propertyAddress);
+      const safeUrl = escapeHtml(invoice.invoiceUrl);
+      const plainText = [
+        `Hi ${booking.contact.firstName || booking.contact.fullName || "there"},`,
+        "",
+        `Your Homegrown Visuals invoice ${invoiceNumber || ""} is ready for ${booking.propertyAddress}.`,
+        `View and pay securely: ${invoice.invoiceUrl}`,
+        "",
+        "Regards,",
+        "Homegrown Visuals",
+      ].join("\n");
+      const message = await request("/conversations/messages", {
         method: "POST",
         body: {
-          ...payload,
-          includeTermsNote: true,
-          action: "send",
-          userId,
+          type: "Email",
+          contactId,
+          emailTo: booking.contact.email,
+          subject: `Homegrown Visuals invoice ${invoiceNumber || ""} - ${booking.propertyAddress}`,
+          message: plainText,
+          html: `<p>Hi ${safeName},</p><p>Your Homegrown Visuals invoice <strong>${safeNumber}</strong> is ready for ${safeAddress}.</p><p><a href="${safeUrl}">View and pay invoice securely</a></p><p>If the button does not open, use this link:<br><a href="${safeUrl}">${safeUrl}</a></p><p>Regards,<br>Homegrown Visuals</p>`,
+          status: "pending",
         },
       });
-      const invoice = body.invoice || {};
-      const id = invoice._id || invoice.id || invoiceId;
-      let invoiceUrl;
-      try {
-        invoiceUrl = new URL(String(body.invoiceUrl || ""));
-      } catch {
-        throw new Error("GHL sent the invoice without returning a valid payment URL");
-      }
-      if (!id || !["http:", "https:"].includes(invoiceUrl.protocol)) {
-        throw new Error("GHL invoice send returned an invalid invoice response");
-      }
-      const paymentPage = await fetchImpl(invoiceUrl, {
-        method: "GET",
-        redirect: "manual",
-        headers: { "User-Agent": "Homegrown-Invoice-Verification/1.0" },
-      });
-      if (paymentPage.status < 200 || paymentPage.status >= 400) {
-        throw new Error(`GHL returned an unusable invoice payment URL (HTTP ${paymentPage.status})`);
-      }
-      return {
-        ...invoice,
-        id,
-        status: invoice.status === "paid" ? "paid" : "sent",
-        invoiceUrl: invoiceUrl.toString(),
-      };
+      if (!message.messageId) throw new Error("GHL did not queue the invoice payment email");
+      return { ...invoice, status: "sent", messageId: message.messageId };
+    },
+
+    async createInvoicePaymentDraft({ booking, contactId, dueDays = 7, userId }) {
+      return text2PayInvoice({ booking, contactId, dueDays, userId, action: "draft" });
     },
 
   };
