@@ -150,6 +150,28 @@ function makeHarness() {
       invoices.push(invoice);
       return invoice;
     },
+    async createAndSendInvoice(options) {
+      const { booking, contactId, dueDays, invoiceId } = options;
+      let invoice = invoiceId
+        ? invoices.find((candidate) => candidate.id === invoiceId)
+        : null;
+      if (!invoice) {
+        invoice = {
+          id: `invoice-${invoices.length + 1}`,
+          invoiceNumber: String(invoices.length + 1),
+          booking,
+          contactId,
+          dueDays,
+        };
+        invoices.push(invoice);
+      }
+      sentInvoices.push({ ...options, invoiceId: invoice.id });
+      return {
+        ...invoice,
+        status: "sent",
+        invoiceUrl: `https://invoice.example.com/pay/${invoice.id}`,
+      };
+    },
     async sendInvoice(id, options) {
       sentInvoices.push({ id, options });
     },
@@ -473,10 +495,33 @@ Object.assign(sendHarness.rows.get("booking-send"), {
   assigned_user_id: "dean-user-id",
 });
 await sendHarness.orchestrator.createInvoice({ bookingId: "booking-send", sendMode: "email", dueDays: 7 });
-assert.deepEqual(sendHarness.sentInvoices[0], {
-  id: "invoice-1",
-  options: { userId: "dean-user-id", action: "email" },
+assert.equal(sendHarness.sentInvoices.length, 1);
+assert.equal(sendHarness.sentInvoices[0].booking.bookingId, "booking-send");
+assert.equal(sendHarness.sentInvoices[0].contactId, "contact-repeat");
+assert.equal(sendHarness.sentInvoices[0].dueDays, 7);
+assert.equal(sendHarness.sentInvoices[0].userId, "dean-user-id");
+assert.equal(sendHarness.sentInvoices[0].invoiceId, "invoice-1");
+
+const recoveredSendHarness = makeHarness();
+await recoveredSendHarness.orchestrator.submit(payload("booking-recovered-send"));
+Object.assign(recoveredSendHarness.rows.get("booking-recovered-send"), {
+  appointment_id: "appointment-recovered-send",
+  appointment_start: "2026-09-10T10:00:00-05:00",
+  appointment_end: "2026-09-10T11:30:00-05:00",
+  assigned_user_id: "dean-user-id",
 });
+recoveredSendHarness.invoices.push({
+  id: "invoice-existing-draft",
+  status: "draft",
+  invoiceNumber: "existing-draft",
+  booking: { ...payload("booking-recovered-send"), bookingId: "booking-recovered-send" },
+});
+await recoveredSendHarness.orchestrator.createInvoice({
+  bookingId: "booking-recovered-send",
+  sendMode: "email",
+});
+assert.equal(recoveredSendHarness.invoices.length, 1, "a recovered draft must be updated instead of duplicated");
+assert.equal(recoveredSendHarness.sentInvoices[0].invoiceId, "invoice-existing-draft");
 
 const unscheduledHarness = makeHarness();
 await unscheduledHarness.orchestrator.submit(payload("booking-unscheduled"));

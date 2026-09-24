@@ -239,12 +239,28 @@ export function createBookingOrchestrator({ ledger, ghl, requestIdFactory = rand
         let invoice = await ghl.findInvoiceByBookingId(bookingId, claim.contact_id);
         const reconciled = Boolean(invoice);
         if (!invoice) {
-          invoice = await ghl.createInvoiceDraft({ booking, contactId: claim.contact_id, dueDays });
+          if (sendMode === "draft") {
+            invoice = await ghl.createInvoiceDraft({ booking, contactId: claim.contact_id, dueDays });
+          } else {
+            const userId = senderUserId || claim.assigned_user_id;
+            invoice = await ghl.createAndSendInvoice({
+              booking,
+              contactId: claim.contact_id,
+              dueDays,
+              userId,
+            });
+          }
         }
         let status = invoice.status || "draft";
         if (sendMode !== "draft" && status === "draft") {
           const userId = senderUserId || claim.assigned_user_id;
-          await ghl.sendInvoice(invoice.id, { userId, action: sendMode });
+          invoice = await ghl.createAndSendInvoice({
+            booking,
+            contactId: claim.contact_id,
+            dueDays,
+            userId,
+            invoiceId: invoice.id,
+          });
           status = "sent";
         }
         await ledger.completeInvoice(bookingId, invoice, status, claim.record_id);

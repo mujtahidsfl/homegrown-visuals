@@ -144,6 +144,82 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
     return parsed;
   }
 
+  async function invoicePayload({ booking, contactId, dueDays = 7, invoiceId = "" }) {
+    const query = new URLSearchParams({ altId: locationId, altType: "location" });
+    const existingPromise = invoiceId
+      ? request(`/invoices/${invoiceId}?${query}`)
+      : Promise.resolve(null);
+    const [settings, locationBody, existingBody] = await Promise.all([
+      request(`/invoices/settings?${query}`),
+      request(`/locations/${locationId}`, { version: "2021-07-28" }),
+      existingPromise,
+    ]);
+    const existing = existingBody?.invoice || existingBody || null;
+    const numberBody = existing?.invoiceNumber
+      ? null
+      : await request(`/invoices/generate-invoice-number?${query}`);
+    const location = locationBody.location || {};
+    const issueDate = existing?.issueDate ? new Date(existing.issueDate) : new Date();
+    const dueDate = existing?.dueDate
+      ? new Date(existing.dueDate)
+      : new Date(issueDate.getTime() + dueDays * 24 * 60 * 60 * 1000);
+    const positiveItems = booking.lineItems.filter((item) => item.amount >= 0);
+    const discount = invoiceDiscount(booking.lineItems);
+    if (!positiveItems.length) throw new Error("Invoice has no billable line items");
+
+    return {
+      altId: locationId,
+      altType: "location",
+      name: `[HGV:${booking.bookingId}] ${booking.packageName} - ${booking.propertyAddress}`,
+      title: existing?.title || settings.title || "INVOICE",
+      businessDetails: existing?.businessDetails || settings.businessDetails || {
+        name: location.name || "Homegrown Visuals",
+        phoneNo: location.phone || "",
+        website: location.website || "https://www.homegrownvisualsmedia.com",
+        address: {
+          addressLine1: location.address || "",
+          city: location.city || "",
+          state: location.state || "",
+          countryCode: location.country || "US",
+          postalCode: location.postalCode || "",
+        },
+      },
+      currency: "USD",
+      items: positiveItems.map((item) => ({
+        name: item.name,
+        description: [item.category, `Property: ${booking.propertyAddress}`].filter(Boolean).join(" | "),
+        currency: "USD",
+        amount: item.amount,
+        qty: item.quantity,
+        taxes: [],
+        type: "one_time",
+      })),
+      ...(discount ? { discount } : {}),
+      termsNotes: `<p><strong>Property:</strong> ${booking.propertyAddress}</p>`,
+      contactDetails: {
+        id: contactId,
+        name: booking.contact.fullName,
+        phoneNo: booking.contact.phone,
+        email: booking.contact.email,
+        address: { addressLine1: booking.propertyAddress, countryCode: "US" },
+      },
+      invoiceNumber: String(existing?.invoiceNumber || numberBody.invoiceNumber),
+      invoiceNumberPrefix: existing?.invoiceNumberPrefix || settings.invoiceNumberPrefix || "INV-",
+      issueDate: dateOnly(issueDate),
+      dueDate: dateOnly(dueDate),
+      sentTo: {
+        email: booking.contact.email ? [booking.contact.email] : [],
+        emailCc: [],
+        emailBcc: [],
+        phoneNo: [],
+      },
+      liveMode: true,
+      automaticTaxesEnabled: false,
+      paymentMethods: { stripe: { enableBankDebitOnly: false } },
+      ...(invoiceId ? { id: invoiceId } : {}),
+    };
+  }
+
   return {
     async getOpportunity(opportunityId) {
       const body = await request(`/opportunities/${opportunityId}`);
@@ -240,71 +316,10 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
     },
 
     async createInvoiceDraft({ booking, contactId, dueDays = 7 }) {
-      const query = new URLSearchParams({ altId: locationId, altType: "location" });
-      const [settings, locationBody, numberBody] = await Promise.all([
-        request(`/invoices/settings?${query}`),
-        request(`/locations/${locationId}`, { version: "2021-07-28" }),
-        request(`/invoices/generate-invoice-number?${query}`),
-      ]);
-      const location = locationBody.location || {};
-      const issueDate = new Date();
-      const dueDate = new Date(issueDate.getTime() + dueDays * 24 * 60 * 60 * 1000);
-      const positiveItems = booking.lineItems.filter((item) => item.amount >= 0);
-      const discount = invoiceDiscount(booking.lineItems);
-      if (!positiveItems.length) throw new Error("Invoice has no billable line items");
-
+      const payload = await invoicePayload({ booking, contactId, dueDays });
       const body = await request("/invoices/", {
         method: "POST",
-        body: {
-          altId: locationId,
-          altType: "location",
-          name: `[HGV:${booking.bookingId}] ${booking.packageName} - ${booking.propertyAddress}`,
-          title: settings.title || "INVOICE",
-          businessDetails: settings.businessDetails || {
-            name: location.name || "Homegrown Visuals",
-            phoneNo: location.phone || "",
-            website: location.website || "https://www.homegrownvisualsmedia.com",
-            address: {
-              addressLine1: location.address || "",
-              city: location.city || "",
-              state: location.state || "",
-              countryCode: location.country || "US",
-              postalCode: location.postalCode || "",
-            },
-          },
-          currency: "USD",
-          items: positiveItems.map((item) => ({
-            name: item.name,
-            description: [item.category, `Property: ${booking.propertyAddress}`].filter(Boolean).join(" | "),
-            currency: "USD",
-            amount: item.amount,
-            qty: item.quantity,
-            taxes: [],
-            type: "one_time",
-          })),
-          ...(discount ? { discount } : {}),
-          termsNotes: `<p><strong>Property:</strong> ${booking.propertyAddress}</p>`,
-          contactDetails: {
-            id: contactId,
-            name: booking.contact.fullName,
-            phoneNo: booking.contact.phone,
-            email: booking.contact.email,
-            address: { addressLine1: booking.propertyAddress, countryCode: "US" },
-          },
-          invoiceNumber: String(numberBody.invoiceNumber),
-          invoiceNumberPrefix: settings.invoiceNumberPrefix || "INV-",
-          issueDate: dateOnly(issueDate),
-          dueDate: dateOnly(dueDate),
-          sentTo: {
-            email: booking.contact.email ? [booking.contact.email] : [],
-            emailCc: [],
-            emailBcc: [],
-            phoneNo: [],
-          },
-          liveMode: true,
-          automaticTaxesEnabled: false,
-          paymentMethods: { stripe: { enableBankDebitOnly: false } },
-        },
+        body: payload,
       });
       const invoice = body.invoice || body;
       const id = invoice._id || invoice.id;
@@ -312,19 +327,44 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
       return { ...invoice, id };
     },
 
-    async sendInvoice(invoiceId, { userId, action = "email" }) {
+    async createAndSendInvoice({ booking, contactId, dueDays = 7, userId, invoiceId = "" }) {
       if (!userId) throw new Error("Missing invoice sender user id");
-      return request(`/invoices/${invoiceId}/send`, {
+      const payload = await invoicePayload({ booking, contactId, dueDays, invoiceId });
+      const body = await request("/invoices/text2pay", {
         method: "POST",
         body: {
-          altId: locationId,
-          altType: "location",
+          ...payload,
+          includeTermsNote: true,
+          action: "send",
           userId,
-          action,
-          liveMode: true,
-          autoPayment: { enable: false },
         },
       });
+      const invoice = body.invoice || {};
+      const id = invoice._id || invoice.id || invoiceId;
+      let invoiceUrl;
+      try {
+        invoiceUrl = new URL(String(body.invoiceUrl || ""));
+      } catch {
+        throw new Error("GHL sent the invoice without returning a valid payment URL");
+      }
+      if (!id || !["http:", "https:"].includes(invoiceUrl.protocol)) {
+        throw new Error("GHL invoice send returned an invalid invoice response");
+      }
+      const paymentPage = await fetchImpl(invoiceUrl, {
+        method: "GET",
+        redirect: "manual",
+        headers: { "User-Agent": "Homegrown-Invoice-Verification/1.0" },
+      });
+      if (paymentPage.status < 200 || paymentPage.status >= 400) {
+        throw new Error(`GHL returned an unusable invoice payment URL (HTTP ${paymentPage.status})`);
+      }
+      return {
+        ...invoice,
+        id,
+        status: invoice.status === "paid" ? "paid" : "sent",
+        invoiceUrl: invoiceUrl.toString(),
+      };
     },
+
   };
 }

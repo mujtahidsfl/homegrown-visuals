@@ -98,10 +98,13 @@ try {
   assert.equal("email" in capturedContactBody, false);
 
   let capturedInvoiceBody;
+  let capturedSentInvoiceBody;
   const invoiceClient = createGhlClient({
     token: "test-token",
     fetchImpl: async (url, options = {}) => {
-      const path = new URL(url).pathname;
+      const parsedUrl = new URL(url);
+      const path = parsedUrl.pathname;
+      if (parsedUrl.hostname === "invoice.example.com") return new Response(null, { status: 302 });
       if (path.endsWith("/invoices/settings")) return new Response(JSON.stringify({ title: "INVOICE" }));
       if (path.endsWith("/locations/pwyt4yVmaVxmQpVX040D")) {
         return new Response(JSON.stringify({ location: { name: "Homegrown Visuals" } }));
@@ -112,6 +115,13 @@ try {
       if (path.endsWith("/invoices/")) {
         capturedInvoiceBody = JSON.parse(options.body);
         return new Response(JSON.stringify({ invoice: { _id: "invoice-test", status: "draft" } }), { status: 201 });
+      }
+      if (path.endsWith("/invoices/text2pay")) {
+        capturedSentInvoiceBody = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          invoice: { _id: "invoice-sent-test", status: "sent" },
+          invoiceUrl: "https://invoice.example.com/pay/invoice-sent-test",
+        }));
       }
       return new Response(JSON.stringify({ message: "Not found" }), { status: 404 });
     },
@@ -128,6 +138,25 @@ try {
   });
   assert.deepEqual(capturedInvoiceBody.sentTo.email, ["client@example.com"]);
   assert.deepEqual(capturedInvoiceBody.sentTo.phoneNo, [], "invoice delivery targets must never include SMS");
+
+  const sentInvoice = await invoiceClient.createAndSendInvoice({
+    contactId: "contact-test",
+    userId: "sender-test",
+    booking: {
+      bookingId: "booking-send-email-only",
+      packageName: "Standard Package",
+      propertyAddress: "123 Email Only Ave",
+      contact: { fullName: "Email Only", email: "client@example.com", phone: "+15555550100" },
+      lineItems: [{ name: "Standard Package", category: "Package", amount: 279, quantity: 1 }],
+    },
+  });
+  assert.equal(sentInvoice.status, "sent");
+  assert.equal(capturedSentInvoiceBody.action, "send");
+  assert.equal(capturedSentInvoiceBody.userId, "sender-test");
+  assert.equal(capturedSentInvoiceBody.includeTermsNote, true);
+  assert.deepEqual(capturedSentInvoiceBody.sentTo.email, ["client@example.com"]);
+  assert.deepEqual(capturedSentInvoiceBody.sentTo.phoneNo, []);
+  assert.deepEqual(capturedSentInvoiceBody.items.map((item) => item.name), ["Standard Package"]);
 
   process.env.HGV_ORCHESTRATOR_MODE = "off";
   process.env.HGV_GHL_WEBHOOK_SECRET = "test-webhook-secret";

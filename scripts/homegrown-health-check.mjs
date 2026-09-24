@@ -678,6 +678,70 @@ async function checkInvoiceDeliverySettings() {
     const status = String(invoice.status || "unknown");
     statusCounts[status] = (statusCounts[status] || 0) + 1;
   }
+  const paymentLinks = [];
+  const unpaidSentInvoices = hgvInvoices.filter(
+    (invoice) => invoice.status === "sent" && Number(invoice.amountPaid || 0) < Number(invoice.total || 0),
+  );
+  for (const invoice of unpaidSentInvoices) {
+    const contactId = invoice.contactDetails?.id || invoice.contactId || "";
+    const invoiceNumber = `${invoice.invoiceNumberPrefix || ""}${invoice.invoiceNumber || ""}`;
+    const result = {
+      invoiceId: invoice._id || invoice.id,
+      invoiceNumber,
+      contactId: contactId || null,
+      host: null,
+      httpStatus: null,
+      healthy: false,
+      error: null,
+    };
+    try {
+      if (!contactId) throw new Error("invoice is missing its contact id");
+      const conversations = (
+        await ghlGet(
+          `/conversations/search?locationId=${encodeURIComponent(locationId)}&contactId=${encodeURIComponent(contactId)}&limit=20`,
+        )
+      ).conversations || [];
+      let paymentUrl = null;
+      for (const conversation of conversations) {
+        const body = await ghlGet(`/conversations/${conversation.id}/messages?limit=100`);
+        const messages = body.messages?.messages || [];
+        for (const message of messages) {
+          const messageBody = String(message.body || "");
+          if (
+            invoiceNumber
+            && !messageBody.includes(invoiceNumber)
+            && !messageBody.includes(String(invoice.invoiceNumber || ""))
+          ) continue;
+          const urls = messageBody.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+          paymentUrl = urls
+            .map((url) => url.replace(/&amp;/g, "&"))
+            .find((url) => {
+              try {
+                return new URL(url).hostname === "link.fastpaydirect.com";
+              } catch {
+                return false;
+              }
+            }) || null;
+          if (paymentUrl) break;
+        }
+        if (paymentUrl) break;
+      }
+      if (!paymentUrl) throw new Error("payment link was not found in the GHL invoice email");
+      const parsed = new URL(paymentUrl);
+      result.host = parsed.hostname;
+      const response = await fetch(paymentUrl, {
+        method: "GET",
+        redirect: "manual",
+        headers: { "User-Agent": "Homegrown-Health-Check/1.0" },
+      });
+      result.httpStatus = response.status;
+      result.healthy = response.status >= 200 && response.status < 400;
+      if (!result.healthy) result.error = `payment link returned HTTP ${response.status}`;
+    } catch (error) {
+      result.error = String(error?.message || error).slice(0, 300);
+    }
+    paymentLinks.push(result);
+  }
   return {
     initialInvoiceNotificationEnabled: settings.customNotification?.customerSendInvoice?.enabled === true,
     paymentReceiptEnabled: settings.customNotification?.customerPaymentSuccess?.enabled === true,
@@ -689,6 +753,7 @@ async function checkInvoiceDeliverySettings() {
     })),
     trackedHgvInvoiceCount: hgvInvoices.length,
     statusCounts,
+    paymentLinks,
   };
 }
 
@@ -719,6 +784,13 @@ function summarize(report) {
   }
   for (const reminder of report.invoiceDelivery?.reminders || []) {
     if (reminder.enabled) issues.push(`GHL invoice reminder is enabled and may send SMS: ${reminder.name}`);
+  }
+  for (const paymentLink of report.invoiceDelivery?.paymentLinks || []) {
+    if (!paymentLink.healthy) {
+      issues.push(
+        `GHL invoice ${paymentLink.invoiceNumber || paymentLink.invoiceId} has an unusable payment link: ${paymentLink.error || "unknown error"}`,
+      );
+    }
   }
   return issues;
 }
@@ -777,6 +849,7 @@ function renderMarkdown(report, jsonPath) {
     `- Initial invoice email enabled: ${report.invoiceDelivery?.initialInvoiceNotificationEnabled ?? "unknown"}`,
     `- Payment receipt enabled: ${report.invoiceDelivery?.paymentReceiptEnabled ?? "unknown"}`,
     `- Automatic invoice reminders enabled: ${(report.invoiceDelivery?.reminders || []).filter((reminder) => reminder.enabled).length}`,
+    `- Unpaid invoice payment links checked: ${report.invoiceDelivery?.paymentLinks?.length ?? 0}`,
     "",
     "## Issues",
     "",
@@ -847,6 +920,17 @@ function renderMarkdown(report, jsonPath) {
     }
   } else {
     lines.push("- None found.");
+  }
+
+  lines.push("", "## Unpaid Invoice Payment Links", "");
+  if (report.invoiceDelivery?.paymentLinks?.length) {
+    for (const paymentLink of report.invoiceDelivery.paymentLinks) {
+      lines.push(
+        `- ${paymentLink.invoiceNumber || paymentLink.invoiceId}: ${paymentLink.healthy ? "healthy" : "broken"} | ${paymentLink.host || "no host"} | HTTP ${paymentLink.httpStatus ?? "not reached"}${paymentLink.error ? ` | ${paymentLink.error}` : ""}`,
+      );
+    }
+  } else {
+    lines.push("- No sent, unpaid HGV invoices found.");
   }
 
   lines.push("", "## Conversation Audit Fetch Errors", "");
