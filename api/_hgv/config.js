@@ -1,5 +1,7 @@
 export const HGV_LOCATION_ID = "pwyt4yVmaVxmQpVX040D";
 export const HGV_PIPELINE_ID = "xBrSZz2liyIoEfZKQ8Uj";
+export const HGV_RETAINER_PIPELINE_ID = "ziIyS3p0u4s1NYHjsVoz";
+export const HGV_RETAINER_LEAD_STAGE_ID = "3d990df5-6d92-4d9a-b7dc-5b548d1dd47d";
 
 export const HGV_STAGE_IDS = {
   newInquiry: "e3233389-1aad-4c59-94a2-5892da6e1819",

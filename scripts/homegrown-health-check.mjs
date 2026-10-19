@@ -2,6 +2,7 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dns from "node:dns/promises";
+import { invoicePaymentLinks } from "./lib/invoice-payment-links.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -70,6 +71,10 @@ const criticalWorkflows = [
   {
     id: "54a69575-59ad-431c-8948-27d9fb94b357",
     name: "Appointment Cancelled - Stop Reminders",
+  },
+  {
+    id: "98a25833-5042-462c-89a9-74b92601efc9",
+    name: "Social Media Inquiry - Acknowledgment",
   },
 ];
 
@@ -714,19 +719,7 @@ async function checkInvoiceDeliverySettings() {
             && !messageBody.includes(invoiceNumber)
             && !messageBody.includes(String(invoice.invoiceNumber || ""))
           ) continue;
-          const urls = messageBody.match(/https?:\/\/[^\s"'<>]+/gi) || [];
-          paymentUrl = urls
-            .map((url) => url.replace(/&amp;/g, "&"))
-            .find((url) => {
-              try {
-                const parsed = new URL(url);
-                return parsed.hostname === "fastpaydirect.com"
-                  || parsed.hostname.endsWith(".fastpaydirect.com")
-                  || /invoice/i.test(parsed.pathname);
-              } catch {
-                return false;
-              }
-            }) || null;
+          paymentUrl = invoicePaymentLinks(messageBody)[0] || null;
           if (paymentUrl) break;
         }
         if (paymentUrl) break;
