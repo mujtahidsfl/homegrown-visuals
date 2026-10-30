@@ -2,16 +2,37 @@ export type PackageKey = "standard" | "zillow_showcase" | "luxury";
 
 export type SqftTierKey =
   | "under_1500"
-  | "1500_2499"
-  | "2500_3999"
-  | "4000_5500";
+  | "1500_2999"
+  | "3000_4499"
+  | "4500_5999";
 
 export const SQFT_TIER_OPTIONS: Array<{ key: SqftTierKey; label: string }> = [
   { key: "under_1500", label: "Under 1,500 sqft" },
-  { key: "1500_2499", label: "1,500 - 2,499 sqft" },
-  { key: "2500_3999", label: "2,500 - 3,999 sqft" },
-  { key: "4000_5500", label: "4,000 - 5,499 sqft" },
+  { key: "1500_2999", label: "1,500 - 2,999 sqft" },
+  { key: "3000_4499", label: "3,000 - 4,499 sqft" },
+  { key: "4500_5999", label: "4,500 - 5,999 sqft" },
 ];
+
+// Properties at or above this size take the custom quote path.
+export const OVERSIZE_MIN_SQFT = 6000;
+
+export const SQFT_SELECT_OPTIONS = [
+  "Under 1500 sq ft",
+  "1500-2999 sq ft",
+  "3000-4499 sq ft",
+  "4500-5999 sq ft",
+  "6000+ sq ft",
+];
+
+export const isOversizeSqft = (sqft: number) => sqft >= OVERSIZE_MIN_SQFT;
+
+export const getSqftTierKey = (sqft: number): SqftTierKey | "" => {
+  if (!sqft || isOversizeSqft(sqft)) return "";
+  if (sqft < 1500) return "under_1500";
+  if (sqft < 3000) return "1500_2999";
+  if (sqft < 4500) return "3000_4499";
+  return "4500_5999";
+};
 
 export const PACKAGE_ROUTE_MAP: Record<PackageKey, string> = {
   standard: "/book/standard",
@@ -71,9 +92,9 @@ export type Addon = {
 
 const SQFT_PRICING = (a: number, b: number, c: number, d: number) => ({
   under_1500: a,
-  "1500_2499": b,
-  "2500_3999": c,
-  "4000_5500": d,
+  "1500_2999": b,
+  "3000_4499": c,
+  "4500_5999": d,
 });
 
 const STANDARD_ADDONS: Addon[] = [

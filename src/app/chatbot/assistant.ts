@@ -1,5 +1,5 @@
 import { KNOWLEDGE_CHUNKS, getKnowledgeContextText } from "./knowledge";
-import { PRICING_SHEET, type SqftTierKey } from "./pricingSheet";
+import { PRICING_SHEET, getSqftTier } from "./pricingSheet";
 
 export type ChatTurn = {
   role: "user" | "assistant";
@@ -104,14 +104,6 @@ function looksLikePackageChoiceRequest(question: string) {
     /\b(package|zillow|showcase|listing|media|photos?|photo|drone|aerial|video|walkthrough|reel|reels|ai|social|twilight|3d)\b/.test(q);
 
   return hasSqft && hasPackageTerm;
-}
-
-function getSqftTier(sqft: number): SqftTierKey {
-  if (sqft < 1500) return "0-1499";
-  if (sqft < 2500) return "1500-2499";
-  if (sqft < 4000) return "2500-3999";
-  if (sqft <= 5500) return "4000-5500";
-  return "5500+";
 }
 
 function formatSinglePrice(price: number | "QUOTE" | undefined) {
