@@ -18,6 +18,7 @@ import {
 } from "../booking/config";
 import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
 import { usesBookingOrchestrator } from "../booking/submission";
+import { requiresDean } from "../booking/videoServices";
 import {
   VIDEO_ORDER_DISCOUNT_NOTE,
   VIDEO_ORDER_DISCOUNT_RATE,
@@ -318,19 +319,6 @@ const FLAT_DURATION_MINUTES: Record<string, number> = {
   land_photos_12: 30,
   land_photos_20: 45,
 };
-
-const BRAIDEN_RESTRICTED_SERVICE_IDS = new Set<string>([
-  "luxury",
-  "re_luxury_base",
-  "re_luxury_area",
-  "re_luxury_ai",
-  "re_luxury_day_night",
-  "re_sm_1",
-  "re_sm_1_ai",
-  "re_sm_2",
-  "re_sm_3",
-  "re_sm_5",
-]);
 
 const getOptionLabel = <T extends { id: string; label: string }>(options: T[], id: string) =>
   options.find((option) => option.id === id)?.label ?? id;
@@ -1037,8 +1025,8 @@ export function ServicesBookingFlow() {
     [realEstateEstimatedDurationMinutes],
   );
 
-  const braidenCanHandleRealEstate = useMemo(
-    () => realEstateSelectedServiceIds.every((serviceId) => !BRAIDEN_RESTRICTED_SERVICE_IDS.has(serviceId)),
+  const realEstateRequiresDean = useMemo(
+    () => requiresDean(realEstateSelectedServiceIds),
     [realEstateSelectedServiceIds],
   );
 
@@ -1047,12 +1035,12 @@ export function ServicesBookingFlow() {
       if (!realEstateDurationBucket) return [];
       const deanOption = DEAN_BUCKET_CALENDARS[realEstateDurationBucket];
       const roundRobinOption = ROUND_ROBIN_BUCKET_CALENDARS[realEstateDurationBucket];
-      if (!braidenCanHandleRealEstate) {
+      if (realEstateRequiresDean) {
         return deanOption ? [deanOption] : [];
       }
       return roundRobinOption ? [roundRobinOption] : [];
     },
-    [braidenCanHandleRealEstate, realEstateDurationBucket],
+    [realEstateRequiresDean, realEstateDurationBucket],
   );
 
   const landEstimatedDurationMinutes = useMemo(
@@ -1073,10 +1061,14 @@ export function ServicesBookingFlow() {
   const availableLandSchedulers = useMemo(
     () => {
       if (!landDurationBucket) return [];
+      const deanOption = DEAN_BUCKET_CALENDARS[landDurationBucket];
       const roundRobinOption = ROUND_ROBIN_BUCKET_CALENDARS[landDurationBucket];
+      if (requiresDean([landSelection])) {
+        return deanOption ? [deanOption] : [];
+      }
       return roundRobinOption ? [roundRobinOption] : [];
     },
-    [landDurationBucket],
+    [landDurationBucket, landSelection],
   );
 
   const toggleSelection = (id: string, set: Dispatch<SetStateAction<string[]>>) => {
