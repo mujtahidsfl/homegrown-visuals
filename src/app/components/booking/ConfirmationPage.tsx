@@ -1,13 +1,7 @@
 import { Link, useLocation } from "react-router";
 
 export function ConfirmationPage() {
-  const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const isCalendarConfirmed =
-    searchParams.get("source") === "ghl" ||
-    searchParams.get("status") === "confirmed" ||
-    searchParams.get("booking") === "confirmed";
-
+  const isInquiry = useLocation().state?.submissionType === "inquiry";
   return (
     <section className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_20%_0%,#f6fdff_0%,#eaf6ff_20%,#d9edf8_42%,#f6f9fc_70%,#ffffff_100%)] px-4 py-8 sm:px-6 sm:py-10">
       <div className="pointer-events-none absolute inset-0">
@@ -58,19 +52,19 @@ export function ConfirmationPage() {
             className="mt-8 text-[#2FA4A9] text-[12px] sm:text-[13px] tracking-[0.22em] uppercase"
             style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 800 }}
           >
-            Congratulations
+            {isInquiry ? "Thank you" : "Congratulations"}
           </p>
           <h1
             className="text-[#1F3A5F] text-[40px] sm:text-[58px] lg:text-[72px] mt-4"
             style={{ fontFamily: "'PP Neue Montreal', 'Montserrat', 'Satoshi', sans-serif", fontWeight: 600, lineHeight: 1.02 }}
           >
-            Booking submitted
+            {isInquiry ? "Inquiry received" : "Booking submitted"}
           </h1>
           <p
             className="text-[#43516a] text-[17px] sm:text-[20px] mt-5 max-w-[720px] mx-auto"
             style={{ fontFamily: "'Satoshi', sans-serif", lineHeight: 1.65 }}
           >
-            Our team will reach out shortly to confirm your time.
+            {isInquiry ? "Dean will reach out shortly to discuss what you’re looking for." : "Our team will reach out shortly to confirm your time."}
           </p>
 
           <div className="mx-auto mt-8 flex w-full max-w-[760px] flex-col gap-3 sm:flex-row sm:justify-center">
@@ -80,13 +74,14 @@ export function ConfirmationPage() {
           </div>
 
           <div className="mt-10 flex flex-col sm:flex-row justify-center gap-3">
-            <Link to="/services" className="h-12 px-7 rounded-full bg-[#1F3A5F] text-white flex items-center justify-center shadow-[0_18px_34px_rgba(31,58,95,0.18)]">
-              Book Another Property →
+            <Link to="/services?rebook=1" className="h-12 px-7 rounded-full bg-[#1F3A5F] text-white flex items-center justify-center shadow-[0_18px_34px_rgba(31,58,95,0.18)]">
+              {isInquiry ? "Start a booking →" : "Book Another Property →"}
             </Link>
             <Link to="/" className="h-12 px-7 rounded-full border border-[#c9d4e3] bg-white/80 text-[#1F3A5F] flex items-center justify-center">
               Back to Homepage
             </Link>
           </div>
+          <p className="mt-4 text-sm text-[#51607b]">For your next booking, you can reuse your saved contact details and add the new property's details.</p>
         </div>
       </div>
       <style>{`

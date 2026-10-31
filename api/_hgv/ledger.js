@@ -146,12 +146,36 @@ export function createGhlObjectLedger({
     return body.record || body;
   }
 
+  async function listMatchingRecords(property, value) {
+    const matches = [];
+    const seen = new Set();
+    let searchAfter = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const body = await request(`/objects/${schemaKey}/records/search`, {
+        method: "POST",
+        body: { locationId, page, pageLimit: 100, query: "", searchAfter },
+      });
+      const records = body.records || [];
+      let added = 0;
+      for (const record of records) {
+        if (seen.has(record.id)) continue;
+        seen.add(record.id);
+        added += 1;
+        if (String(record.properties?.[property] || "") === String(value)) matches.push(record);
+      }
+      if (records.length < 100 || (Number.isFinite(body.total) && seen.size >= body.total)) return matches;
+      if (!added) throw new Error("GHL Booking Job pagination did not advance");
+      searchAfter = records.at(-1)?.searchAfter || records.at(-1)?.sort || [];
+    }
+    throw new Error("GHL Booking Job lookup exceeded its page limit");
+  }
+
   async function searchExact(property, value, { retryIndexing = false } = {}) {
     if (!value) return null;
     const delays = retryIndexing ? SEARCH_DELAYS_MS : [0];
     for (const delay of delays) {
       if (delay) await sleep(delay);
-      const body = await request(`/objects/${schemaKey}/records/search`, {
+      const body = String(value).length <= 75 ? await request(`/objects/${schemaKey}/records/search`, {
         method: "POST",
         body: {
           locationId,
@@ -160,10 +184,13 @@ export function createGhlObjectLedger({
           query: String(value),
           searchAfter: [],
         },
-      });
-      const candidate = (body.records || []).find(
+      }) : { records: [] };
+      let candidate = (body.records || []).find(
         (record) => String(record.properties?.[property] || "") === String(value),
       );
+      // GHL's indexed query can miss a just-created record. Read the paginated
+      // collection before treating a unique booking id as missing.
+      if (!candidate) candidate = (await listMatchingRecords(property, value))[0];
       if (candidate) {
         const record = await getRecord(candidate.id);
         if (String(record.properties?.[property] || "") === String(value)) return record;
@@ -241,6 +268,18 @@ export function createGhlObjectLedger({
       }));
     },
 
+    async completeInquiry(bookingId, values, recordId = "") {
+      const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
+      if (!record) throw new Error("No GHL record matched the completed inquiry");
+      return rowFromRecord(await updateRecord(record.id, {
+        contact_id: values.contact_id,
+        opportunity_id: values.opportunity_id,
+        status: "inquiry_received",
+        lease_expires_at: "",
+        error: "",
+      }));
+    },
+
     async failBooking(bookingId, error, recordId = "") {
       const record = await bookingRecord(bookingId, recordId, { retryIndexing: true });
       if (!record) return;
@@ -257,17 +296,10 @@ export function createGhlObjectLedger({
 
       for (const delay of SEARCH_DELAYS_MS) {
         if (delay) await sleep(delay);
-        const body = await request(`/objects/${schemaKey}/records/search`, {
-          method: "POST",
-          body: {
-            locationId,
-            page: 1,
-            pageLimit: 100,
-            query: String(appointment.contactId),
-            searchAfter: [],
-          },
-        });
-        const records = await Promise.all((body.records || []).map((record) => getRecord(record.id)));
+        // An indexed contact search can return a partial set and make two
+        // pending jobs look like one. Inspect every matching collection row.
+        const matching = await listMatchingRecords("contact_id", appointment.contactId);
+        const records = await Promise.all(matching.map((record) => getRecord(record.id)));
         const candidates = records.map(rowFromRecord).filter((row) =>
           row.contact_id === appointment.contactId
           && !row.appointment_id

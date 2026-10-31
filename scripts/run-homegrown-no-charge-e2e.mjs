@@ -135,11 +135,19 @@ try {
     source_page: "HGV guarded no-charge E2E",
   };
 
-  const ledger = createGhlObjectLedger({
+  const realLedger = createGhlObjectLedger({
     token,
     locationId,
     schemaKey: BOOKING_OBJECT_KEY,
   });
+  const ledger = {
+    ...realLedger,
+    async claimBooking(...args) {
+      const claim = await realLedger.claimBooking(...args);
+      if (claim.record_id) cleanup.bookingRecordId = claim.record_id;
+      return claim;
+    },
+  };
   const ghl = {
     ...realGhl,
     async upsertContact() {
@@ -181,6 +189,20 @@ try {
     assert.equal(appointment.matched, true);
     assert.equal(appointment.bookingId, bookingId);
     assert.equal(appointment.opportunityId, cleanup.opportunityId);
+  } else {
+    // Exercise the appointment ledger without moving a production opportunity
+    // into notification stages or booking an actual photographer's calendar.
+    const appointment = {
+      id: `hgv-appointment-${suffix}`,
+      contactId: contact.id,
+      calendarId: "",
+      title: `HGV No Charge Test | ${propertyAddress}`,
+      startTime: "2026-11-02T10:00:00-06:00",
+      endTime: "2026-11-02T11:30:00-06:00",
+    };
+    const matched = await ledger.claimAppointment(appointment);
+    assert.equal(matched?.booking_id, bookingId);
+    await ledger.updateAppointment(bookingId, appointment, "scheduled", matched.record_id);
   }
 
   const invoice = E2E_BASE_URL

@@ -21,6 +21,7 @@ import {
 } from "../booking/config";
 import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
 import { usesBookingOrchestrator } from "../booking/submission";
+import { forgetReturningContact, readReturningContact, rememberReturningContact } from "../booking/returningContact";
 import { requiresDean } from "../booking/videoServices";
 import {
   VIDEO_ORDER_DISCOUNT_NOTE,
@@ -41,7 +42,6 @@ import {
 import { AddressAutocompleteInput } from "./AddressAutocompleteInput";
 import { LeadConnectorScheduler, type SchedulerOption } from "./LeadConnectorScheduler";
 
-const SOCIAL_MEDIA_WEBHOOK_URL = "https://hook.us2.make.com/im0m5469kvkslku9bfqqudvymgs1nq6x";
 const SERVICE_CARD_IMAGES = {
   real_estate: realEstateHero,
   vacant_land: landHero,
@@ -778,6 +778,8 @@ export function ServicesBookingFlow() {
   const [serviceType, setServiceType] = useState<ServiceTypeKey | null>(null);
   const [realEstateStep, setRealEstateStep] = useState(1);
   const [landStep, setLandStep] = useState(1);
+  const [returningContact, setReturningContact] = useState(readReturningContact);
+  const [contactReused, setContactReused] = useState(false);
 
   const [realEstateProperty, setRealEstateProperty] = useState({
     address: "",
@@ -866,7 +868,19 @@ export function ServicesBookingFlow() {
     phone: "",
     message: "",
   });
+  const [socialSmsConsent, setSocialSmsConsent] = useState(false);
+  const [socialSubmitting, setSocialSubmitting] = useState(false);
+  const [socialError, setSocialError] = useState<string | null>(null);
   const [realEstateDiscountCode, setRealEstateDiscountCode] = useState("");
+
+  const reuseContact = () => {
+    if (!returningContact) return;
+    setRealEstateContact((current) => ({ ...current, ...returningContact }));
+    setRealEstateOversizeContact((current) => ({ ...current, ...returningContact }));
+    setLandContact((current) => ({ ...current, ...returningContact }));
+    setSocialContact((current) => ({ ...current, ...returningContact }));
+    setContactReused(true);
+  };
 
   useEffect(() => {
     if (servicesDraftRestoredRef.current) return;
@@ -1875,6 +1889,7 @@ export function ServicesBookingFlow() {
       localStorage.setItem("hgv_lead_name", realEstateContact.fullName);
       localStorage.setItem("hgv_lead_email", realEstateContact.email);
       localStorage.setItem("hgv_lead_phone", realEstateContact.phone);
+      rememberReturningContact(realEstateContact);
       localStorage.setItem(
         "hgv_booking_summary",
         JSON.stringify({
@@ -1981,6 +1996,7 @@ export function ServicesBookingFlow() {
       localStorage.setItem("hgv_lead_name", landContact.fullName);
       localStorage.setItem("hgv_lead_email", landContact.email);
       localStorage.setItem("hgv_lead_phone", landContact.phone);
+      rememberReturningContact(landContact);
       localStorage.setItem(
         "hgv_booking_summary",
         JSON.stringify({
@@ -2073,6 +2089,19 @@ export function ServicesBookingFlow() {
             Strategic content that closes deals faster, keeps your calendar packed, and makes your name impossible to ignore.
           </p>
         </div>
+
+        {returningContact && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[#cde5e8] bg-[#f0fafa] p-5">
+            <div>
+              <p className="font-semibold text-[#1F3A5F]">{contactReused ? "Your contact details are filled in." : "Booking with us again?"}</p>
+              <p className="mt-1 text-sm text-[#51607b]">{contactReused ? "Review them in the form, then add this property's details and choose your services." : "Reuse the contact details saved on this device. Enter the details for your next property below."}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              {!contactReused && <button type="button" className={PRIMARY_BUTTON} onClick={reuseContact}>Use my saved contact details</button>}
+              <button type="button" className="text-sm text-[#51607b] underline" onClick={() => { forgetReturningContact(); setReturningContact(null); }}>Forget saved details</button>
+            </div>
+          </div>
+        )}
 
         {!serviceType && (
           <SectionShell>
@@ -2182,65 +2211,71 @@ export function ServicesBookingFlow() {
               Share a few details and Dean will follow up personally. No pricing or calendar required for this path.
             </p>
             <form
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                const payload = new URLSearchParams();
+                if (socialSubmitting) return;
                 const formData = new FormData(event.currentTarget);
+                setSocialSubmitting(true);
+                setSocialError(null);
+                try {
+                  const response = await fetch("/api/hgv-inquiry", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      inquiry_id: servicesDraftIdRef.current,
+                      contact: socialContact,
+                      message: socialContact.message,
+                      sms_consent: socialSmsConsent,
+                      website: formData.get("website") || "",
+                    }),
+                  });
+                  const result = await response.json();
+                  if (!response.ok || !result.ok) throw new Error("Inquiry was not accepted");
+                } catch {
+                  setSocialError("We couldn't submit your inquiry. Your details are still here. Please try again.");
+                  setSocialSubmitting(false);
+                  return;
+                }
                 sendBackupEmailFromFormData(formData, {
                   source: "services_social_media_marketing_flow",
                   subject: "Backup Copy - Social Media Marketing Inquiry",
                 });
                 sendGoogleSheetsFromFormData(formData, "services_social_media_marketing_flow");
-                formData.forEach((value, key) => {
-                  if (typeof value === "string") payload.append(key, value);
-                });
-                payload.append("source", "services_social_media_marketing_flow");
-                payload.append("submitted_at", new Date().toISOString());
-
-                fetch("https://formsubmit.co/homegrownventuresllc@gmail.com", {
-                  method: "POST",
-                  mode: "no-cors",
+                // Preserve Dean's existing direct inquiry notification while
+                // the durable GHL record becomes the primary intake path.
+                const ownerNotice = new URLSearchParams();
+                formData.forEach((value, key) => { if (typeof value === "string") ownerNotice.append(key, value); });
+                ownerNotice.append("source", "services_social_media_marketing_flow");
+                ownerNotice.append("submitted_at", new Date().toISOString());
+                void fetch("https://formsubmit.co/homegrownventuresllc@gmail.com", {
+                  method: "POST", mode: "no-cors", keepalive: true,
                   headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-                  body: payload.toString(),
-                  keepalive: true,
+                  body: ownerNotice.toString(),
                 }).catch(() => undefined);
-
-                if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-                  const blob = new Blob([payload.toString()], { type: "application/x-www-form-urlencoded;charset=UTF-8" });
-                  navigator.sendBeacon(SOCIAL_MEDIA_WEBHOOK_URL, blob);
-                } else {
-                  fetch(SOCIAL_MEDIA_WEBHOOK_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-                    body: payload.toString(),
-                    keepalive: true,
-                  }).catch(() => undefined);
-                }
 
                 servicesSubmissionFinalizedRef.current = true;
                 clearServicesDraft();
-                localStorage.setItem("hgv_lead_email", socialContact.email);
-                localStorage.setItem(
-                  "hgv_booking_summary",
-                  JSON.stringify({
-                    package_name: "Social Media Marketing",
-                    address: "",
-                    shoot_date: "",
-                    shoot_time: "",
-                    estimated_total: 0,
-                  }),
-                );
-                navigate("/confirmation");
+                rememberReturningContact(socialContact);
+                try {
+                  localStorage.setItem("hgv_lead_email", socialContact.email);
+                  localStorage.setItem("hgv_booking_summary", JSON.stringify({
+                    package_name: "Social Media Marketing", address: "", shoot_date: "", shoot_time: "", estimated_total: 0,
+                  }));
+                } catch { /* An accepted inquiry must work when browser storage is disabled. */ }
+                navigate("/confirmation", { state: { submissionType: "inquiry" } });
               }}
               className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
               <input type="hidden" name="_subject" value="New Social Media Marketing Inquiry" />
               <input type="hidden" name="_captcha" value="false" />
               <input type="hidden" name="_template" value="table" />
+              <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
               <input
                 name="full_name"
                 required
+                aria-label="Full name"
+                autoComplete="name"
+                maxLength={150}
                 value={socialContact.fullName}
                 onChange={(e) => setSocialContact((prev) => ({ ...prev, fullName: e.target.value }))}
                 placeholder="Full Name"
@@ -2251,6 +2286,9 @@ export function ServicesBookingFlow() {
                 type="email"
                 name="email"
                 required
+                aria-label="Email address"
+                autoComplete="email"
+                maxLength={254}
                 value={socialContact.email}
                 onChange={(e) => setSocialContact((prev) => ({ ...prev, email: e.target.value }))}
                 placeholder="Email Address"
@@ -2260,6 +2298,10 @@ export function ServicesBookingFlow() {
               <input
                 name="phone"
                 required
+                type="tel"
+                aria-label="Phone number"
+                autoComplete="tel"
+                maxLength={40}
                 value={socialContact.phone}
                 onChange={(e) => setSocialContact((prev) => ({ ...prev, phone: e.target.value }))}
                 placeholder="Phone Number"
@@ -2269,6 +2311,8 @@ export function ServicesBookingFlow() {
               <textarea
                 name="message"
                 required
+                aria-label="What are you looking for?"
+                maxLength={3000}
                 value={socialContact.message}
                 onChange={(e) => setSocialContact((prev) => ({ ...prev, message: e.target.value }))}
                 placeholder="Message / What are you looking for?"
@@ -2276,9 +2320,14 @@ export function ServicesBookingFlow() {
                 className="sm:col-span-2 px-4 py-3 rounded-[14px] border border-[#d7e7f2] bg-white/95 outline-none focus:border-[#2FA4A9] focus:ring-2 focus:ring-[#a9e1e4]/40 transition resize-y"
                 style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
               />
+              <label className="sm:col-span-2 flex items-start gap-3 text-sm text-[#51607b]">
+                <input type="checkbox" name="sms_consent" value="requested" checked={socialSmsConsent} onChange={(event) => setSocialSmsConsent(event.target.checked)} className="mt-1" />
+                <span>Text me about this inquiry. Message and data rates may apply. Reply STOP to opt out.</span>
+              </label>
+              {socialError && <p role="alert" className="sm:col-span-2 text-sm text-red-700">{socialError}</p>}
               <div className="sm:col-span-2">
-                <button type="submit" className={PRIMARY_BUTTON} style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}>
-                  Submit inquiry
+                <button type="submit" disabled={socialSubmitting} className={PRIMARY_BUTTON} style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}>
+                  {socialSubmitting ? "Submitting…" : "Submit inquiry"}
                 </button>
               </div>
             </form>

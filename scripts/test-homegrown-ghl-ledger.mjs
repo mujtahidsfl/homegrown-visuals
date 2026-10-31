@@ -12,6 +12,7 @@ function createFakeGhlObjectsApi() {
   const records = new Map();
   let nextId = 1;
   let searchEnabled = true;
+  let queryEnabled = true;
 
   async function fetchImpl(url, options = {}) {
     const parsedUrl = new URL(url);
@@ -36,10 +37,11 @@ function createFakeGhlObjectsApi() {
 
     if (method === "POST" && path.endsWith("/records/search")) {
       const query = String(body.query || "");
-      const matches = (searchEnabled ? [...records.values()] : []).filter((record) =>
+      const matches = (searchEnabled && (!query || queryEnabled) ? [...records.values()] : []).filter((record) =>
         Object.values(record.properties).some((value) => String(value).includes(query)),
       );
-      return jsonResponse(201, { records: matches, total: matches.length });
+      const offset = (body.page - 1) * body.pageLimit;
+      return jsonResponse(201, { records: matches.slice(offset, offset + body.pageLimit), total: matches.length });
     }
 
     const id = path.split("/").at(-1);
@@ -59,6 +61,7 @@ function createFakeGhlObjectsApi() {
     fetchImpl,
     records,
     setSearchEnabled(value) { searchEnabled = value; },
+    setQueryEnabled(value) { queryEnabled = value; },
   };
 }
 
@@ -227,5 +230,21 @@ assert.equal(stale.acquired, true);
 nowMs += 3 * 60 * 1000;
 const reclaimed = await ledger.claimBooking(booking("booking-stale"), "request-stale-2");
 assert.equal(reclaimed.acquired, true, "expired processing leases must be recoverable");
+
+const inquiryClaim = await ledger.claimBooking({ ...booking("inquiry-no-appointment"), formType: "social_media_inquiry" }, "inquiry-request");
+await ledger.completeInquiry("inquiry-no-appointment", { contact_id: "contact-inquiry", opportunity_id: "retainer-opportunity" }, inquiryClaim.record_id);
+assert.equal((await ledger.claimBooking(booking("inquiry-no-appointment"), "inquiry-retry")).acquired, false);
+assert.equal(await ledger.claimAppointment({ id: "unrelated-appointment", contactId: "contact-inquiry" }), null,
+  "a social inquiry must never be selected as a pending shoot");
+assert.equal((await ledger.claimInvoice("inquiry-no-appointment", "unrelated-invoice")).reason, "missing_appointment");
+
+api.setQueryEnabled(false);
+for (let index = 0; index < 105; index++) api.records.set(`filler-${index}`, { id: `filler-${index}`, properties: { website_booking_id: `filler-${index}` } });
+const unindexed = await ledger.claimBooking(booking("booking-unindexed"), "unindexed-first");
+await ledger.completeBooking("booking-unindexed", { contact_id: "unindexed-contact", opportunity_id: "unindexed-opportunity" }, unindexed.record_id);
+const unindexedRetry = await ledger.claimBooking(booking("booking-unindexed"), "unindexed-retry");
+assert.equal(unindexedRetry.opportunity_id, "unindexed-opportunity", "an unindexed job beyond the first page must still suppress a retry");
+const unindexedAppointment = await ledger.claimAppointment({ id: "unindexed-appointment", contactId: "unindexed-contact" });
+assert.equal(unindexedAppointment.booking_id, "booking-unindexed");
 
 console.log("Homegrown GHL Booking Job ledger tests passed");

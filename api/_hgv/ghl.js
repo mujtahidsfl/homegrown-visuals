@@ -2,6 +2,8 @@ import {
   CONTACT_FIELD_IDS,
   HGV_LOCATION_ID,
   HGV_PIPELINE_ID,
+  HGV_RETAINER_PIPELINE_ID,
+  HGV_RETAINER_LEAD_STAGE_ID,
   HGV_TIME_ZONE,
   OPPORTUNITY_FIELD_IDS,
 } from "./config.js";
@@ -302,10 +304,10 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
       return { id, raw: record };
     },
 
-    async findOpportunityByBookingId(contactId, bookingId) {
+    async findOpportunityByBookingId(contactId, bookingId, pipelineId = HGV_PIPELINE_ID) {
       const params = new URLSearchParams({
         locationId,
-        pipelineId: HGV_PIPELINE_ID,
+        pipelineId,
         contactId,
         status: "all",
         limit: "100",
@@ -344,6 +346,25 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
         body: changes,
       });
       return body.opportunity || body;
+    },
+
+    async createSocialInquiryOpportunity(inquiry, contactId) {
+      const body = await request("/opportunities/", {
+        method: "POST",
+        body: {
+          locationId,
+          pipelineId: HGV_RETAINER_PIPELINE_ID,
+          pipelineStageId: HGV_RETAINER_LEAD_STAGE_ID,
+          contactId,
+          name: `${inquiry.contact.fullName} | Social Media Marketing`,
+          status: "open",
+          monetaryValue: 0,
+          customFields: bookingCustomFields(inquiry),
+        },
+      });
+      const opportunity = body.opportunity || body;
+      if (!opportunity.id) throw new Error("GHL inquiry opportunity returned no id");
+      return opportunity;
     },
 
     async findInvoiceByBookingId(bookingId, contactId) {
