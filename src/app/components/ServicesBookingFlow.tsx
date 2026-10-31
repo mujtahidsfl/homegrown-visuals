@@ -1404,6 +1404,7 @@ export function ServicesBookingFlow() {
       // A draft saved before the band change must not land on the wrong price tier.
       const sqft = SQFT_SELECT_OPTIONS.includes(draft.realEstateProperty.sqft) ? draft.realEstateProperty.sqft : "";
       setRealEstateProperty({ ...draft.realEstateProperty, sqft });
+      if (!sqft) setRealEstateStep(1);
     }
     if (draft.realEstatePackage) {
       setRealEstatePackage(draft.realEstatePackage as PackageKey);
