@@ -12,7 +12,10 @@ import {
   BASE_PRICES,
   PACKAGE_DISPLAY,
   PACKAGE_WEBHOOK_URLS,
+  SQFT_SELECT_OPTIONS,
   SQFT_TIER_OPTIONS,
+  getSqftTierKey,
+  isOversizeSqft,
   type PackageKey,
   type SqftTierKey,
 } from "../booking/config";
@@ -143,14 +146,14 @@ const REAL_ESTATE_PHOTO_ITEMS = [
     id: "re_listing_photos",
     label: "Listing Photos",
     pricingType: "tier" as const,
-    prices: { under_1500: 189, "1500_2499": 229, "2500_3999": 299, "4000_5500": 349 },
+    prices: { under_1500: 189, "1500_2999": 229, "3000_4499": 299, "4500_5999": 349 },
   },
   {
     id: "re_zillow_3d",
     label: "Zillow 3D",
     description: "3D walkthrough tour of home",
     pricingType: "tier" as const,
-    prices: { under_1500: 149, "1500_2499": 179, "2500_3999": 199, "4000_5500": 219 },
+    prices: { under_1500: 149, "1500_2999": 179, "3000_4499": 199, "4500_5999": 219 },
   },
 ];
 
@@ -177,14 +180,14 @@ const REAL_ESTATE_VIDEO_ITEMS = [
     label: "Cinematic Video 45–60sec",
     description: "intentionally crafted, luxury property showcase (no agent on-camera)",
     pricingType: "tier" as const,
-    prices: { under_1500: 379, "1500_2499": 409, "2500_3999": 459, "4000_5500": 509 },
+    prices: { under_1500: 379, "1500_2999": 409, "3000_4499": 459, "4500_5999": 509 },
   },
   {
     id: "re_walkthrough_60",
     label: "60sec Continuous Walkthrough",
     description: "our basic video walking through the property (no agent on-camera)",
     pricingType: "tier" as const,
-    prices: { under_1500: 149, "1500_2499": 175, "2500_3999": 199, "4000_5500": 229 },
+    prices: { under_1500: 149, "1500_2999": 175, "3000_4499": 199, "4500_5999": 229 },
   },
 ];
 
@@ -273,15 +276,15 @@ const TIER_DURATION_MINUTES: Record<
   string,
   Partial<Record<SqftTierKey, number>>
 > = {
-  standard: { under_1500: 75, "1500_2499": 90, "2500_3999": 120, "4000_5500": 135 },
-  zillow_showcase: { under_1500: 105, "1500_2499": 120, "2500_3999": 150, "4000_5500": 165 },
-  luxury: { under_1500: 105, "1500_2499": 120, "2500_3999": 150, "4000_5500": 165 },
-  re_zillow_3d: { under_1500: 30, "1500_2499": 45, "2500_3999": 60, "4000_5500": 90 },
-  re_listing_photos: { under_1500: 45, "1500_2499": 75, "2500_3999": 105, "4000_5500": 120 },
-  re_cinematic_video: { under_1500: 60, "1500_2499": 75, "2500_3999": 90, "4000_5500": 90 },
-  re_walkthrough_60: { under_1500: 10, "1500_2499": 15, "2500_3999": 20, "4000_5500": 30 },
-  re_highlight_30: { under_1500: 30, "1500_2499": 35, "2500_3999": 45, "4000_5500": 45 },
-  re_highlight_30_ai: { under_1500: 30, "1500_2499": 35, "2500_3999": 45, "4000_5500": 45 },
+  standard: { under_1500: 75, "1500_2999": 90, "3000_4499": 120, "4500_5999": 135 },
+  zillow_showcase: { under_1500: 105, "1500_2999": 120, "3000_4499": 150, "4500_5999": 165 },
+  luxury: { under_1500: 105, "1500_2999": 120, "3000_4499": 150, "4500_5999": 165 },
+  re_zillow_3d: { under_1500: 30, "1500_2999": 45, "3000_4499": 60, "4500_5999": 90 },
+  re_listing_photos: { under_1500: 45, "1500_2999": 75, "3000_4499": 105, "4500_5999": 120 },
+  re_cinematic_video: { under_1500: 60, "1500_2999": 75, "3000_4499": 90, "4500_5999": 90 },
+  re_walkthrough_60: { under_1500: 10, "1500_2999": 15, "3000_4499": 20, "4500_5999": 30 },
+  re_highlight_30: { under_1500: 30, "1500_2999": 35, "3000_4499": 45, "4500_5999": 45 },
+  re_highlight_30_ai: { under_1500: 30, "1500_2999": 35, "3000_4499": 45, "4500_5999": 45 },
 };
 
 const FLAT_DURATION_MINUTES: Record<string, number> = {
@@ -736,15 +739,6 @@ const toSqftNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const getSqftTierKey = (sqft: number): SqftTierKey | "" => {
-  if (!sqft) return "";
-  if (sqft <= 1499) return "under_1500";
-  if (sqft <= 2499) return "1500_2499";
-  if (sqft <= 3999) return "2500_3999";
-  if (sqft <= 5499) return "4000_5500";
-  return "";
-};
-
 type ServiceTypeKey = (typeof ServiceType)[keyof typeof ServiceType];
 
 type ContactFields = {
@@ -910,7 +904,7 @@ export function ServicesBookingFlow() {
 
   const realEstateSqftValue = useMemo(() => toSqftNumber(realEstateProperty.sqft), [realEstateProperty.sqft]);
   const realEstateSqftTier = useMemo(() => getSqftTierKey(realEstateSqftValue), [realEstateSqftValue]);
-  const isOversize = realEstateSqftValue > 5500;
+  const isOversize = isOversizeSqft(realEstateSqftValue);
   const realEstateContactComplete = Boolean(
     realEstateContact.fullName.trim() &&
       realEstateContact.email.trim() &&
@@ -1399,7 +1393,10 @@ export function ServicesBookingFlow() {
       setLandStep(draft.landStep);
     }
     if (draft.realEstateProperty) {
-      setRealEstateProperty(draft.realEstateProperty);
+      // A draft saved before the band change must not land on the wrong price tier.
+      const sqft = SQFT_SELECT_OPTIONS.includes(draft.realEstateProperty.sqft) ? draft.realEstateProperty.sqft : "";
+      setRealEstateProperty({ ...draft.realEstateProperty, sqft });
+      if (!sqft) setRealEstateStep(1);
     }
     if (draft.realEstatePackage) {
       setRealEstatePackage(draft.realEstatePackage as PackageKey);
@@ -1928,7 +1925,7 @@ export function ServicesBookingFlow() {
       localStorage.setItem(
         "hgv_booking_summary",
         JSON.stringify({
-          package_name: "Custom Quote (5,500+ sqft)",
+          package_name: "Custom Quote (6,000+ sqft)",
           address: realEstateProperty.address,
           shoot_date: "",
           shoot_time: "",
@@ -2607,17 +2604,15 @@ export function ServicesBookingFlow() {
                         className={FORM_INPUT_BASE}
                       >
                         <option value="">Property Size</option>
-                        <option value="Under 1500 sq ft">Under 1500 sq ft</option>
-                        <option value="1500-2499 sqft">1500-2499 sqft</option>
-                        <option value="2500-3999 sqft">2500-3999 sqft</option>
-                        <option value="4000-5499 sqft">4000-5499 sqft</option>
-                        <option value="5500+ sqft">5500+ sqft</option>
+                        {SQFT_SELECT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
                       </select>
                     </div>
                     {isOversize && (
                       <div className="mt-6 rounded-[18px] border border-[#f4d6b1] bg-[#fff7ee] p-5">
                         <p className="text-[#8c5a1e] text-[14px] font-semibold" style={{ fontFamily: "'Satoshi', sans-serif" }}>
-                          Any property over 5,500 sqft we create a quote for.
+                          Any property 6,000 sqft or larger we create a quote for.
                         </p>
                         <p className="text-[#7b6a57] text-[13px] mt-2" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400 }}>
                           Share your details and we’ll follow up with a custom quote.
