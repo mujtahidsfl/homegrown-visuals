@@ -11,9 +11,11 @@
     "test:homegrown:inquiry": "node scripts/test-homegrown-inquiry.mjs",
     "fix:homegrown:calendars": "node scripts/fix-homegrown-calendar-durations.mjs",
     "test:homegrown": "node scripts/test-homegrown-preflight.mjs",
+    "test:homegrown:sqft-bands": "node scripts/test-homegrown-sqft-bands.mjs",
     "test:homegrown:api": "node scripts/test-homegrown-api.mjs",
     "test:homegrown:orchestrator": "node scripts/test-homegrown-orchestrator.mjs",
     "test:homegrown:ledger": "node scripts/test-homegrown-ghl-ledger.mjs",
+    "test:homegrown:video-routing": "node scripts/test-homegrown-video-routing.mjs",
     "test:homegrown:e2e:no-charge": "node scripts/run-homegrown-no-charge-e2e.mjs",
     "sync:portfolio:supabase": "node scripts/sync-portfolio-to-supabase.mjs",
     "test:homegrown:returning-contact": "node scripts/test-homegrown-returning-contact.mjs"

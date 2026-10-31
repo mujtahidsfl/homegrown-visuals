@@ -99,7 +99,7 @@ export function FooterSection() {
               </li>
               <li className="inline-flex items-start gap-2">
                 <MapPin size={16} className="mt-[3px] text-white/70" aria-hidden="true" />
-                <span>7319 N 9th Ave, Pensacola, FL 32504</span>
+                <span>7139 N 9th Ave, Pensacola, FL 32504</span>
               </li>
             </ul>
           </div>
@@ -119,7 +119,7 @@ export function FooterSection() {
                 <Facebook size={16} />
               </a>
               <a
-                href="https://www.instagram.com/_homegrownvisuals?igsh=MWNvYWZldHJvdXY1dw=="
+                href="https://www.instagram.com/_homegrownmarketing/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-9 h-9 rounded-full bg-white text-[#0a1422] inline-flex items-center justify-center hover:opacity-90"
