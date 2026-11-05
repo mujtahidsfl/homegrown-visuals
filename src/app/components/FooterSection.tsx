@@ -1,7 +1,7 @@
 import { ArrowUpRight, Facebook, Instagram, Mail, MapPin, Phone } from "lucide-react";
 import { Link } from "react-router";
 import imgHgvLogo from "../../assets/cd8f347f8929f0c65b02f008df4e6d7431d70a30.png";
-import { sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
+import { DEAN_ALERT_ENDPOINT, sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
 
 const FOOTER_EMAIL_WEBHOOK_URL = "https://hook.us2.make.com/72v3rcegdh1cxqmupxtf4vxe3ftaf7gu";
 
@@ -181,7 +181,7 @@ export function FooterSection() {
             Join Our Email List
           </p>
           <form
-            action="https://formsubmit.co/homegrownventuresllc@gmail.com"
+            action={DEAN_ALERT_ENDPOINT}
             method="POST"
             onSubmit={(event) => {
               sendBackupEmailFromFormData(new FormData(event.currentTarget), {

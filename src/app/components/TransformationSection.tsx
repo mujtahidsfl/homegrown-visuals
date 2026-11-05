@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { PACKAGE_DISPLAY, type PackageKey } from "../booking/config";
-import { sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
+import { DEAN_ALERT_ENDPOINT, sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
 import { BookingIntentModal } from "./booking/BookingIntentModal";
 
 const SOCIAL_MEDIA_WEBHOOK_URL = "https://hook.us2.make.com/im0m5469kvkslku9bfqqudvymgs1nq6x";
@@ -272,7 +272,7 @@ export function TransformationSection() {
             </p>
 
             <form
-              action="https://formsubmit.co/homegrownventuresllc@gmail.com"
+              action={DEAN_ALERT_ENDPOINT}
               method="POST"
               onSubmit={(event) => {
                 sendBackupEmailFromFormData(new FormData(event.currentTarget), {

@@ -33,6 +33,7 @@ import {
 } from "../booking/discounts";
 import {
   sendBackupEmailFromFormData,
+  DEAN_ALERT_ENDPOINT,
   sendBackupEmailFromPayload,
   sendBackupEmailFromPayloadKeepalive,
   sendGoogleSheetsFromFormData,
@@ -2247,7 +2248,7 @@ export function ServicesBookingFlow() {
                 formData.forEach((value, key) => { if (typeof value === "string") ownerNotice.append(key, value); });
                 ownerNotice.append("source", "services_social_media_marketing_flow");
                 ownerNotice.append("submitted_at", new Date().toISOString());
-                void fetch("https://formsubmit.co/homegrownventuresllc@gmail.com", {
+                void fetch(DEAN_ALERT_ENDPOINT, {
                   method: "POST", mode: "no-cors", keepalive: true,
                   headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
                   body: ownerNotice.toString(),
