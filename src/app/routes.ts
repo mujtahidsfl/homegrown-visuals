@@ -11,6 +11,7 @@ import { AboutPage } from "./components/AboutPage";
 import { AppShell } from "./components/AppShell";
 import { CalendarTestPage } from "./components/CalendarTestPage";
 import { LoginPage } from "./account/LoginPage";
+import { AccountPage } from "./account/AccountPage";
 import { packageServicesRoute, usesBookingOrchestrator } from "./booking/submission";
 
 const packageBookingElement = (packageKey: "standard" | "zillow_showcase" | "luxury") =>
@@ -74,6 +75,10 @@ export const router = createBrowserRouter([
       {
         path: "calendar-test",
         element: createElement(CalendarTestPage),
+      },
+      {
+        path: "account",
+        element: createElement(AccountPage),
       },
       {
         path: "account/login",
