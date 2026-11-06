@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { toCustomerInvoice, toCustomerInvoices } from "../api/_hgv/customerInvoices.js";
 import { createGhlClient } from "../api/_hgv/ghl.js";
 import { HGV_LOCATION_ID } from "../api/_hgv/config.js";
+import { createAccountHandler } from "../api/hgv-account.js";
 
 const now = new Date("2026-11-06T12:00:00Z");
 const inv = (overrides = {}) => ({
@@ -134,6 +135,118 @@ function fakeFetch(responder) {
   const { fetchImpl } = fakeFetch(() => ({}));
   const ghl = createGhlClient({ token: "t", fetchImpl });
   assert.deepEqual(await ghl.listContactInvoices("c1"), []);
+}
+
+// --- Task 4: /api/hgv-account handler ---
+function fakeRes() {
+  return {
+    statusCode: 0,
+    headers: {},
+    body: null,
+    setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
+    end(text) { this.body = text ? JSON.parse(text) : null; },
+  };
+}
+const req = (overrides = {}) => ({ method: "GET", url: "/api/hgv-account", headers: { authorization: "Bearer tok" }, ...overrides });
+
+function stubGhl({ contacts = {}, invoices = {}, find, list } = {}) {
+  const seen = { emails: [], contactIds: [] };
+  return {
+    seen,
+    ghl: {
+      findContactIdsByEmail: find || (async (email) => { seen.emails.push(email); return contacts[email] || []; }),
+      listContactInvoices: list || (async (id) => { seen.contactIds.push(id); return invoices[id] || []; }),
+    },
+  };
+}
+
+{
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => ({ email: "me@x.com" }), makeGhl: () => stubGhl().ghl })(req({ method: "POST" }), res);
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.headers.allow, "GET");
+}
+
+{
+  let verified = 0;
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => { verified++; return { email: "me@x.com" }; }, makeGhl: () => stubGhl().ghl })(req({ headers: {} }), res);
+  assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { ok: false, error: "unauthorized" });
+  assert.equal(verified, 0);
+  assert.equal(res.headers["cache-control"], "no-store");
+}
+
+{
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => null, makeGhl: () => stubGhl().ghl })(req(), res);
+  assert.equal(res.statusCode, 401);
+}
+
+{
+  const { seen, ghl } = stubGhl({ contacts: { "me@x.com": ["c1"] } });
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => ({ email: "me@x.com" }), makeGhl: () => ghl, now: () => now })(
+    req({ url: "/api/hgv-account?email=other@x.com&contactId=evil" }),
+    res,
+  );
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(seen.emails, ["me@x.com"]);
+  assert.deepEqual(seen.contactIds, ["c1"]);
+}
+
+{
+  const { seen, ghl } = stubGhl({
+    contacts: { "me@x.com": ["c1", "c2"] },
+    invoices: {
+      c1: [inv({ _id: "shared", issueDate: "2026-09-01" }), inv({ _id: "a", issueDate: "2026-10-01" })],
+      c2: [inv({ _id: "shared", issueDate: "2026-09-01" }), inv({ _id: "b", issueDate: "2026-10-20" })],
+    },
+  });
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => ({ email: "me@x.com" }), makeGhl: () => ghl, now: () => now })(req(), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.email, "me@x.com");
+  assert.deepEqual(seen.contactIds.sort(), ["c1", "c2"]);
+  assert.deepEqual(res.body.invoices.map((i) => i.issueDate), ["2026-10-20", "2026-10-01", "2026-09-01"]);
+}
+
+{
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => ({ email: "me@x.com" }), makeGhl: () => stubGhl().ghl })(req(), res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body.invoices, []);
+}
+
+{
+  const res = fakeRes();
+  const { ghl } = stubGhl({ find: () => new Promise(() => {}) });
+  await createAccountHandler({ verifyToken: async () => ({ email: "me@x.com" }), makeGhl: () => ghl, timeoutMs: 20, log: () => {} })(req(), res);
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(res.body, { ok: false, error: "invoices_unavailable" });
+}
+
+{
+  const logged = [];
+  const res = fakeRes();
+  const { ghl } = stubGhl({ find: async () => { throw new Error("boom jane@example.com 450"); } });
+  await createAccountHandler({ verifyToken: async () => ({ email: "jane@example.com" }), makeGhl: () => ghl, log: (...args) => logged.push(args) })(req(), res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(logged.length, 1);
+  const text = JSON.stringify(logged);
+  assert.ok(!text.includes("jane@example.com"));
+  assert.ok(!text.includes("450"));
+}
+
+{
+  const res = fakeRes();
+  await createAccountHandler({
+    verifyToken: async () => ({ email: "me@x.com" }),
+    makeGhl: () => { throw new Error("Missing GHL token"); },
+    log: () => {},
+  })(req(), res);
+  assert.equal(res.statusCode, 503);
 }
 
 console.log("Customer account invoice checks passed");
