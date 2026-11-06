@@ -21,6 +21,18 @@ function summaryFrom(items) {
   return text.length > SUMMARY_MAX ? `${text.slice(0, SUMMARY_MAX - 1).trimEnd()}…` : text;
 }
 
+const finite = (value) => (value === null || value === undefined || value === "" ? NaN : Number(value));
+
+/** Amount still owed, or null when the invoice doesn't say. */
+function resolveAmountDue(invoice) {
+  const due = finite(invoice.amountDue);
+  if (Number.isFinite(due)) return due;
+  const total = finite(invoice.total);
+  if (!Number.isFinite(total)) return null;
+  const paid = finite(invoice.amountPaid);
+  return total - (Number.isFinite(paid) ? paid : 0);
+}
+
 function customerStatus(rawStatus, amountDue, dueDate, now) {
   if (rawStatus === "void") return "void";
   if (rawStatus === "paid" || amountDue <= 0) return "paid";
@@ -37,9 +49,12 @@ export function toCustomerInvoice(invoice, now) {
   const rawStatus = String(invoice?.status || "").trim().toLowerCase();
   if (rawStatus === "draft") return null;
 
-  const amountDue = Number(invoice.amountDue) || 0;
+  const amountDue = resolveAmountDue(invoice);
   const dueDate = calendarDate(invoice.dueDate);
-  const status = customerStatus(rawStatus, amountDue, dueDate, now);
+  // If we can't tell what's owed, never claim it's paid (unless GHL says so) and never offer a pay link.
+  const status = amountDue === null
+    ? (rawStatus === "void" || rawStatus === "paid" ? rawStatus : "unpaid")
+    : customerStatus(rawStatus, amountDue, dueDate, now);
   // Only statuses we know are open for payment get a pay link; anything unrecognised
   // (e.g. payment_processing) shows as unpaid without one.
   const knownPayable = rawStatus === "sent" || rawStatus === "partially_paid" || rawStatus === "overdue";
@@ -50,12 +65,12 @@ export function toCustomerInvoice(invoice, now) {
     issueDate: calendarDate(invoice.issueDate),
     dueDate,
     total: Number(invoice.total) || 0,
-    amountDue,
+    amountDue: amountDue ?? 0,
     currency: String(invoice.currency || "USD"),
     status,
     summary: summaryFrom(invoice.items),
   };
-  if (knownPayable && PAYABLE.has(status) && amountDue > 0 && id) {
+  if (knownPayable && PAYABLE.has(status) && amountDue !== null && amountDue > 0 && id) {
     result.payUrl = `${PAY_BASE_URL}/invoice/${encodeURIComponent(id)}`;
   }
   return result;

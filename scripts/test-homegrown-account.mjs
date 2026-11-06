@@ -3,6 +3,7 @@ import { toCustomerInvoice, toCustomerInvoices } from "../api/_hgv/customerInvoi
 import { createGhlClient } from "../api/_hgv/ghl.js";
 import { HGV_LOCATION_ID } from "../api/_hgv/config.js";
 import { createAccountHandler } from "../api/hgv-account.js";
+import { verifySupabaseToken } from "../api/_hgv/supabaseAuth.js";
 
 const now = new Date("2026-11-06T12:00:00Z");
 const inv = (overrides = {}) => ({
@@ -199,8 +200,8 @@ function stubGhl({ contacts = {}, invoices = {}, find, list } = {}) {
   const { seen, ghl } = stubGhl({
     contacts: { "me@x.com": ["c1", "c2"] },
     invoices: {
-      c1: [inv({ _id: "shared", issueDate: "2026-09-01" }), inv({ _id: "a", issueDate: "2026-10-01" })],
-      c2: [inv({ _id: "shared", issueDate: "2026-09-01" }), inv({ _id: "b", issueDate: "2026-10-20" })],
+      c1: [inv({ _id: "shared", issueDate: "2026-09-01", contactDetails: { id: "c1" } }), inv({ _id: "a", issueDate: "2026-10-01", contactDetails: { id: "c1" } })],
+      c2: [inv({ _id: "shared", issueDate: "2026-09-01", contactDetails: { id: "c1" } }), inv({ _id: "b", issueDate: "2026-10-20", contactDetails: { id: "c2" } })],
     },
   });
   const res = fakeRes();
@@ -247,6 +248,62 @@ function stubGhl({ contacts = {}, invoices = {}, find, list } = {}) {
     log: () => {},
   })(req(), res);
   assert.equal(res.statusCode, 503);
+}
+
+// --- Final review fixes ---
+// I1: invoices must belong to the matched contact, even if GHL ignores contactId.
+{
+  const { ghl } = stubGhl({
+    contacts: { "me@x.com": ["c1"] },
+    invoices: {
+      c1: [
+        inv({ _id: "mine", contactDetails: { id: "c1", email: "me@x.com" } }),
+        inv({ _id: "foreign", contactDetails: { id: "c9", email: "other@x.com" } }),
+        inv({ _id: "unknown", contactDetails: {} }),
+      ],
+    },
+  });
+  const logged = [];
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => ({ email: "me@x.com" }), makeGhl: () => ghl, now: () => now, log: (...a) => logged.push(a) })(req(), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.invoices.length, 1, "only the contact's own invoice is returned");
+  assert.ok(!JSON.stringify(logged).includes("other@x.com"));
+}
+
+// I2: a server-side verification failure is 503, not 401 (avoids a login redirect loop).
+{
+  const res = fakeRes();
+  await createAccountHandler({ verifyToken: async () => ({ error: "unavailable" }), makeGhl: () => stubGhl().ghl, log: () => {} })(req(), res);
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(res.body, { ok: false, error: "auth_unavailable" });
+}
+{
+  const fakeCreate = (result) => () => ({ auth: { getUser: async () => { if (result instanceof Error) throw result; return result; } } });
+  const env = { SUPABASE_URL: "https://s.example", SUPABASE_ANON_KEY: "k" };
+  const confirmed = { data: { user: { email: " Me@X.com ", email_confirmed_at: "2026-11-01" } }, error: null };
+  assert.deepEqual(await verifySupabaseToken("t", env, fakeCreate(confirmed)), { email: "me@x.com" });
+  assert.deepEqual(await verifySupabaseToken("t", {}, fakeCreate(confirmed)), { error: "unavailable" });
+  assert.equal(await verifySupabaseToken("t", env, fakeCreate({ data: { user: null }, error: { status: 401, message: "bad jwt" } })), null);
+  assert.equal(await verifySupabaseToken("t", env, fakeCreate({ data: { user: null }, error: { status: 403, message: "bad jwt" } })), null);
+  assert.deepEqual(await verifySupabaseToken("t", env, fakeCreate({ data: { user: null }, error: { status: 500, message: "down" } })), { error: "unavailable" });
+  assert.deepEqual(await verifySupabaseToken("t", env, fakeCreate({ data: { user: null }, error: { status: 0, message: "fetch failed" } })), { error: "unavailable" });
+  assert.deepEqual(await verifySupabaseToken("t", env, fakeCreate(new Error("network"))), { error: "unavailable" });
+  assert.equal(await verifySupabaseToken("t", env, fakeCreate({ data: { user: { email: "a@x.com", email_confirmed_at: null } }, error: null })), null);
+  assert.equal(await verifySupabaseToken("", env, fakeCreate(confirmed)), null);
+}
+
+// I3: a missing amountDue must not show as Paid.
+{
+  const missing = toCustomerInvoice(inv({ amountDue: undefined, total: 450, amountPaid: 100 }), now);
+  assert.equal(missing.amountDue, 350);
+  assert.equal(missing.status, "unpaid");
+  assert.ok(missing.payUrl);
+  const unknown = toCustomerInvoice(inv({ amountDue: undefined, total: undefined }), now);
+  assert.equal(unknown.status, "unpaid");
+  assert.equal("payUrl" in unknown, false);
+  const paidNoAmount = toCustomerInvoice(inv({ status: "paid", amountDue: undefined }), now);
+  assert.equal(paidNoAmount.status, "paid");
 }
 
 console.log("Customer account invoice checks passed");

@@ -19,6 +19,23 @@ export type InvoicesResult =
 
 type FetchLike = (url: string, init: { headers: Record<string, string> }) => Promise<{ status: number; ok: boolean; json: () => Promise<any> }>;
 
+/**
+ * Fetch invoices; on a 401, refresh the session once and retry with the new token.
+ * Returns "unauthorized" only when the refreshed token is also rejected (or no
+ * refresh was possible), so the caller can safely sign out and go to login.
+ */
+export async function loadInvoicesWithRefresh(
+  accessToken: string,
+  refresh: () => Promise<string | null>,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+): Promise<InvoicesResult> {
+  const first = await fetchMyInvoices(accessToken, fetchImpl);
+  if (first.kind !== "unauthorized") return first;
+  const fresh = await refresh().catch(() => null);
+  if (!fresh) return { kind: "unauthorized" };
+  return fetchMyInvoices(fresh, fetchImpl);
+}
+
 /** Fetch the signed-in customer's invoices. Identity comes only from the token. */
 export async function fetchMyInvoices(accessToken: string, fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<InvoicesResult> {
   try {

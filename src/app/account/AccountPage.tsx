@@ -3,7 +3,14 @@ import { useNavigate } from "react-router";
 import { SiteNavbar } from "../components/SiteNavbar";
 import { AddressAutocompleteInput } from "../components/AddressAutocompleteInput";
 import { useCustomerSession } from "./useCustomerSession";
-import { fetchMyInvoices, type CustomerInvoice, type CustomerInvoiceStatus } from "./invoicesApi";
+import { loadInvoicesWithRefresh, type CustomerInvoice, type CustomerInvoiceStatus } from "./invoicesApi";
+import { supabase } from "./supabaseClient";
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.refreshSession();
+  return error ? null : data.session?.access_token ?? null;
+}
 import { addAddress, deleteAddress, listAddresses, loadProfile, saveProfile, updateAddress, type SavedAddress } from "./profileApi";
 import {
   ACCOUNT_BODY_STYLE,
@@ -47,7 +54,7 @@ function InvoicesSection({ token, onUnauthorized }: { token: string; onUnauthori
 
   const load = useCallback(async () => {
     setState("loading");
-    const result = await fetchMyInvoices(token);
+    const result = await loadInvoicesWithRefresh(token, refreshAccessToken);
     if (result.kind === "unauthorized") return onUnauthorized();
     if (result.kind === "unavailable") return setState("unavailable");
     setInvoices(result.invoices);
@@ -229,6 +236,12 @@ export function AccountPage() {
   const navigate = useNavigate();
   const { available, ready, session, email, signOut } = useCustomerSession();
   const toLogin = useCallback(() => navigate(LOGIN_REDIRECT, { replace: true }), [navigate]);
+  // The server rejected even a refreshed token: drop the local session first so
+  // the login page doesn't see it and bounce straight back here.
+  const signOutToLogin = useCallback(async () => {
+    if (supabase) await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+    toLogin();
+  }, [toLogin]);
 
   useEffect(() => {
     if (!available || (ready && !session)) toLogin();
@@ -246,7 +259,7 @@ export function AccountPage() {
           <h1 className="text-[#1F3A5F] text-[32px] sm:text-[40px]" style={ACCOUNT_HEADING_STYLE}>My account</h1>
           <button type="button" className={ACCOUNT_SECONDARY_BUTTON} onClick={() => void signOut()}>Sign out</button>
         </div>
-        <InvoicesSection token={session.access_token} onUnauthorized={toLogin} />
+        <InvoicesSection token={session.access_token} onUnauthorized={signOutToLogin} />
         <DetailsSection email={email} />
         <AddressesSection />
       </div>
