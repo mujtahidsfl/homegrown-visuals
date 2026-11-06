@@ -304,6 +304,37 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
       return { id, raw: record };
     },
 
+    // Customer portal: all contacts whose email matches the verified login email
+    // exactly (case-insensitive, trimmed). GHL's eq filter is the first pass; the
+    // local check drops anything that isn't an exact match.
+    async findContactIdsByEmail(email) {
+      const wanted = String(email || "").trim().toLowerCase();
+      if (!wanted) return [];
+      const body = await request("/contacts/search", {
+        method: "POST",
+        body: {
+          locationId,
+          pageLimit: 20,
+          filters: [{ field: "email", operator: "eq", value: wanted }],
+        },
+      });
+      return (body.contacts || [])
+        .filter((contact) => contact?.id && String(contact.email || "").trim().toLowerCase() === wanted)
+        .map((contact) => contact.id);
+    },
+
+    async listContactInvoices(contactId) {
+      const params = new URLSearchParams({
+        altId: locationId,
+        altType: "location",
+        contactId,
+        limit: "100",
+        offset: "0",
+      });
+      const body = await request(`/invoices/?${params}`);
+      return body.invoices || [];
+    },
+
     async findOpportunityByBookingId(contactId, bookingId, pipelineId = HGV_PIPELINE_ID) {
       const params = new URLSearchParams({
         locationId,
