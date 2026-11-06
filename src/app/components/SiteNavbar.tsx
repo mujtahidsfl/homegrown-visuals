@@ -3,6 +3,7 @@ import { Menu, X } from "lucide-react";
 import { Link } from "react-router";
 import imgHgvLogo from "../../assets/cd8f347f8929f0c65b02f008df4e6d7431d70a30.png";
 import { SmartSearchBox } from "./SmartSearchBox";
+import { useCustomerSession } from "../account/useCustomerSession";
 
 type SiteNavbarProps = {
   overlay?: boolean;
@@ -13,6 +14,7 @@ type SiteNavbarProps = {
 
 export function SiteNavbar({ overlay = false, variant = "warm", flat = false, navBgClass }: SiteNavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const customer = useCustomerSession();
 
   const links = [
     { label: "Home", to: "/" },
@@ -64,6 +66,15 @@ export function SiteNavbar({ overlay = false, variant = "warm", flat = false, na
 
       <div className="hidden lg:flex items-center gap-3">
         <SmartSearchBox overlay={overlay} flat={flat} />
+        {customer.available && (
+          <Link
+            to={customer.session ? "/account" : "/account/login"}
+            className={`${overlay ? "text-white" : "text-[#1F3A5F]"} text-[15px] hover:opacity-70 transition-opacity`}
+            style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}
+          >
+            {customer.session ? "My account" : "Log in"}
+          </Link>
+        )}
         <Link
           to="/services"
           className={`${overlay ? "border-white/45 text-white hover:bg-white/10" : flat ? "bg-[#1F3A5F]/8 text-[#1F3A5F] hover:bg-[#1F3A5F]/14 border-transparent" : "border-[#1F3A5F]/25 text-[#1F3A5F] hover:bg-[#1F3A5F]/5"} h-[44px] px-6 rounded-full border text-[15px] transition-colors flex items-center`}
@@ -94,6 +105,24 @@ export function SiteNavbar({ overlay = false, variant = "warm", flat = false, na
               {link.label}
             </Link>
           ))}
+          {customer.available && (
+            <Link
+              to={customer.session ? "/account" : "/account/login"}
+              className="text-[#1F3A5F] text-[18px] font-['Satoshi',sans-serif] hover:opacity-70 transition-opacity"
+              onClick={() => setMobileOpen(false)}
+            >
+              {customer.session ? "My account" : "Log in"}
+            </Link>
+          )}
+          {customer.available && customer.session && (
+            <button
+              type="button"
+              className="text-left text-[#1F3A5F] text-[18px] font-['Satoshi',sans-serif] hover:opacity-70 transition-opacity"
+              onClick={() => { setMobileOpen(false); void customer.signOut(); }}
+            >
+              Sign out
+            </button>
+          )}
           <Link to="/services" className="bg-[#597eb1] text-white text-[13px] font-['Satoshi',sans-serif] tracking-[0.06em] uppercase px-6 py-3 rounded-[999px] hover:bg-[#4a6d9e] transition-colors w-full mt-2 text-center">
             Book a Shoot
           </Link>
