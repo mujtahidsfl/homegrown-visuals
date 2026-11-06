@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readReturningContact, rememberReturningContact, forgetReturningContact } from "../src/app/booking/returningContact.ts";
+import { addressChoices, profileAsContact, shouldOfferSaveAddress } from "../src/app/booking/savedAddresses.ts";
 
 const values = new Map();
 const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -29,4 +30,20 @@ try {
   if (previous) Object.defineProperty(globalThis, "localStorage", previous);
   else delete globalThis.localStorage;
 }
+// Signed-in customers: account profile and saved addresses.
+assert.deepEqual(profileAsContact({ full_name: "A", phone: "1" }, "a@x.com"), { fullName: "A", email: "a@x.com", phone: "1" });
+assert.deepEqual(profileAsContact({ full_name: " A ", phone: " 1 " }, " a@x.com "), { fullName: "A", email: "a@x.com", phone: "1" });
+assert.equal(profileAsContact({ full_name: "A", phone: "" }, "a@x.com"), null);
+assert.equal(profileAsContact({ full_name: "A", phone: "1" }, null), null);
+assert.equal(profileAsContact(null, "a@x.com"), null);
+
+assert.deepEqual(addressChoices([{ id: "1", label: "Home", address: "1 Main St" }], ""), [{ id: "1", text: "Home — 1 Main St", address: "1 Main St" }]);
+assert.deepEqual(addressChoices([{ id: "2", label: "", address: "2 Oak Ave" }], ""), [{ id: "2", text: "2 Oak Ave", address: "2 Oak Ave" }]);
+assert.deepEqual(addressChoices([{ id: "1", label: "Home", address: "1 Main St" }], " 1 main st "), []);
+
+assert.equal(shouldOfferSaveAddress([{ address: "1 Main St" }], "1 MAIN ST"), false);
+assert.equal(shouldOfferSaveAddress([{ address: "1 Main St" }], "2 Oak Ave"), true);
+assert.equal(shouldOfferSaveAddress([], ""), false);
+assert.equal(shouldOfferSaveAddress([], "   "), false);
+
 console.log("Returning contact privacy, expiry, removal, and blocked-storage checks passed");

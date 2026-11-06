@@ -22,6 +22,11 @@ import {
 import { submitGhlBookingPreflight } from "../booking/ghlPreflight";
 import { usesBookingOrchestrator } from "../booking/submission";
 import { forgetReturningContact, readReturningContact, rememberReturningContact } from "../booking/returningContact";
+import { profileAsContact } from "../booking/savedAddresses";
+import { useCustomerSession } from "../account/useCustomerSession";
+import { listAddresses, loadProfile, type SavedAddress } from "../account/profileApi";
+import type { ProfileRow } from "../account/profileInput";
+import { SaveAddressOffer, SavedAddressChips } from "../account/BookingAccountBits";
 import { requiresDean } from "../booking/videoServices";
 import {
   VIDEO_ORDER_DISCOUNT_NOTE,
@@ -780,6 +785,22 @@ export function ServicesBookingFlow() {
   const [landStep, setLandStep] = useState(1);
   const [returningContact, setReturningContact] = useState(readReturningContact);
   const [contactReused, setContactReused] = useState(false);
+  const customer = useCustomerSession();
+  const customerUserId = customer.session?.user?.id ?? null;
+  const [accountProfile, setAccountProfile] = useState<ProfileRow | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const refreshSavedAddresses = () => { listAddresses().then(setSavedAddresses).catch(() => {}); };
+  useEffect(() => {
+    if (!customerUserId) {
+      setAccountProfile(null);
+      setSavedAddresses([]);
+      return;
+    }
+    loadProfile().then(setAccountProfile).catch(() => {});
+    refreshSavedAddresses();
+  }, [customerUserId]);
+  const accountContact = customerUserId ? profileAsContact(accountProfile, customer.email) : null;
+  const reuseSource = accountContact ?? returningContact;
 
   const [realEstateProperty, setRealEstateProperty] = useState({
     address: "",
@@ -874,11 +895,11 @@ export function ServicesBookingFlow() {
   const [realEstateDiscountCode, setRealEstateDiscountCode] = useState("");
 
   const reuseContact = () => {
-    if (!returningContact) return;
-    setRealEstateContact((current) => ({ ...current, ...returningContact }));
-    setRealEstateOversizeContact((current) => ({ ...current, ...returningContact }));
-    setLandContact((current) => ({ ...current, ...returningContact }));
-    setSocialContact((current) => ({ ...current, ...returningContact }));
+    if (!reuseSource) return;
+    setRealEstateContact((current) => ({ ...current, ...reuseSource }));
+    setRealEstateOversizeContact((current) => ({ ...current, ...reuseSource }));
+    setLandContact((current) => ({ ...current, ...reuseSource }));
+    setSocialContact((current) => ({ ...current, ...reuseSource }));
     setContactReused(true);
   };
 
@@ -2090,7 +2111,15 @@ export function ServicesBookingFlow() {
           </p>
         </div>
 
-        {returningContact && (
+        {accountContact ? (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[#cde5e8] bg-[#f0fafa] p-5">
+            <div>
+              <p className="font-semibold text-[#1F3A5F]">{contactReused ? "Your account details are filled in." : `Signed in as ${accountContact.email}`}</p>
+              <p className="mt-1 text-sm text-[#51607b]">{contactReused ? "Review them in the form, then add this property's details and choose your services." : "Use the contact details from your account. Enter the details for your next property below."}</p>
+            </div>
+            {!contactReused && <button type="button" className={PRIMARY_BUTTON} onClick={reuseContact}>Use my account details</button>}
+          </div>
+        ) : returningContact && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[#cde5e8] bg-[#f0fafa] p-5">
             <div>
               <p className="font-semibold text-[#1F3A5F]">{contactReused ? "Your contact details are filled in." : "Booking with us again?"}</p>
@@ -2375,6 +2404,7 @@ export function ServicesBookingFlow() {
                   className={`w-full ${FORM_INPUT_BASE}`}
                   containerClassName="mt-5"
                 />
+                <SavedAddressChips saved={savedAddresses} current={landProperty.address} onPick={(address) => setLandProperty({ address })} />
               </SectionShell>
             )}
 
@@ -2534,6 +2564,10 @@ export function ServicesBookingFlow() {
                   </button>
                 </div>
 
+                {landDetailsSaved && customerUserId && (
+                  <SaveAddressOffer saved={savedAddresses} address={landProperty.address} onSaved={refreshSavedAddresses} />
+                )}
+
                 {landDetailsSaved && (
                   <div className="mt-6">
                     <LeadConnectorScheduler
@@ -2646,6 +2680,11 @@ export function ServicesBookingFlow() {
                         placeholder="Property Address"
                         className={`w-full ${FORM_INPUT_BASE}`}
                         containerClassName="sm:col-span-2"
+                      />
+                      <SavedAddressChips
+                        saved={savedAddresses}
+                        current={realEstateProperty.address}
+                        onPick={(address) => setRealEstateProperty((prev) => ({ ...prev, address }))}
                       />
                       <select
                         value={realEstateProperty.sqft}
@@ -3249,6 +3288,9 @@ export function ServicesBookingFlow() {
                 <p className="text-[#51607b] text-[15px] mt-3" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400 }}>
                   Your project details are already submitted. Pick a time below to finish the booking, then you'll land on the booking confirmation page.
                 </p>
+                {customerUserId && (
+                  <SaveAddressOffer saved={savedAddresses} address={realEstateProperty.address} onSaved={refreshSavedAddresses} />
+                )}
                 <div className="mt-6">
                   <LeadConnectorScheduler
                     label="Booking Calendar"
