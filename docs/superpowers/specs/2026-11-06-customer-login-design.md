@@ -62,10 +62,7 @@ create table public.customer_addresses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   label text not null default '',
-  street text not null,
-  city text not null,
-  state text not null,
-  zip text not null,
+  address text not null check (length(trim(address)) > 0),
   created_at timestamptz not null default timezone('utc', now())
 );
 create index customer_addresses_user_idx on public.customer_addresses(user_id);
@@ -79,12 +76,12 @@ create policy "own addresses" on public.customer_addresses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
 
-The address shape must match the fields the booking flow's property step already uses. Confirm this against `ServicesBookingFlow.tsx` during implementation, and add any extra field it needs (for example a unit number).
+The booking flow stores a property as one autocompleted string (`realEstateProperty.address`, `landProperty.address` in `ServicesBookingFlow.tsx`), so a saved address is the same single string plus an optional label.
 
 ### Vercel function `api/hgv-account.js` (GET, invoices only)
 
 1. Read `Authorization: Bearer <access token>`. If it's missing, return 401.
-2. Verify the token with Supabase (server-side `SUPABASE_URL` + JWT secret or service key). If it's invalid or expired, return 401. Ignore any email or contact ID in the query string or body.
+2. Verify the token with Supabase (`auth.getUser(token)` using server-side `SUPABASE_URL` + `SUPABASE_ANON_KEY`). If it's invalid or expired, return 401. Ignore any email or contact ID in the query string or body.
 3. Take the verified `email` from the token. If it isn't present or confirmed, return 401.
 4. Look up the GHL contact(s) with exactly that email through `createGhlClient` (`api/_hgv/ghl.js`), which uses the server token.
 5. For each matched contact, list invoices filtered by `contactId`. Leave out drafts. Sort newest first.
@@ -145,7 +142,7 @@ The address shape must match the fields the booking flow's property step already
    - Turn on email OTP and set redirect URLs.
    - Agree the email template and sender (ideally `info@homegrown.marketing` once it's verified).
    - Apply the migration.
-2. Vercel environment variables for the production project: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_JWT_SECRET` (or a server-only key).
+2. Vercel environment variables for the production project: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
 3. Open a PR to `mujtahidsfl/homegrown-visuals`; Muj approves the release.
 4. After release: one controlled production sign-in with Dean's test email.
 
