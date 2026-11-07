@@ -207,7 +207,7 @@ function unknownReply(): AssistantReply {
       "I can’t help with that one yet. I can answer questions about Homegrown Visuals services, pricing, booking, prep, service areas, delivery timelines, and SMS consent. For anything outside that, Dean or our team can confirm the right answer.",
     actions: [
       { label: "Connect with team", kind: "link", href: "/services?service=social-media" },
-      { label: "Email us", kind: "link", href: "mailto:homegrownventuresllc@gmail.com" },
+      { label: "Email us", kind: "link", href: "mailto:info@homegrown.marketing" },
     ],
     source: "fallback",
   };
