@@ -86,9 +86,9 @@ export function FooterSection() {
             </p>
             <ul className="space-y-2 text-white/72 text-[15px]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300 }}>
               <li>
-                <a href="mailto:homegrownventuresllc@gmail.com" className="hover:text-white inline-flex items-center gap-2">
+                <a href="mailto:info@homegrown.marketing" className="hover:text-white inline-flex items-center gap-2">
                   <Mail size={16} className="text-white/70" aria-hidden="true" />
-                  homegrownventuresllc@gmail.com
+                  info@homegrown.marketing
                 </a>
               </li>
               <li>
