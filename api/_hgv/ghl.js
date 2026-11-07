@@ -304,6 +304,16 @@ export function createGhlClient({ token, locationId = HGV_LOCATION_ID, fetchImpl
       return { id, raw: record };
     },
 
+    // Adds tags without replacing the contact's existing ones (upsert with a
+    // tags array would overwrite them).
+    async addContactTags(contactId, tags) {
+      await request(`/contacts/${encodeURIComponent(contactId)}/tags`, {
+        method: "POST",
+        version: "2021-07-28",
+        body: { tags },
+      });
+    },
+
     // Customer portal: all contacts whose email matches the verified login email
     // exactly (case-insensitive, trimmed). GHL's eq filter is the first pass; the
     // local check drops anything that isn't an exact match.

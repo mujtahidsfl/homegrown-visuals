@@ -9,6 +9,7 @@
     "audit:homegrown": "node scripts/homegrown-health-check.mjs",
     "test:homegrown:invoice-links": "node scripts/test-homegrown-invoice-links.mjs",
     "test:homegrown:inquiry": "node scripts/test-homegrown-inquiry.mjs",
+    "test:homegrown:email-list": "node scripts/test-homegrown-email-list.mjs",
     "fix:homegrown:calendars": "node scripts/fix-homegrown-calendar-durations.mjs",
     "test:homegrown": "node scripts/test-homegrown-preflight.mjs",
     "test:homegrown:sqft-bands": "node scripts/test-homegrown-sqft-bands.mjs",

@@ -96,3 +96,54 @@ Keep these active unless they receive a separate migration and test:
 - The live draft-only test passed after this repair: duplicate booking and invoice suppression, deleted synthetic opportunity recovery, itemized invoice, and property address. No charge was made. Synthetic test records were cleaned up. Google event creation and real inbox/carrier delivery remain unverified.
 - Website edits require a reviewed release through the repository’s production deployment. The inquiry SMS workflow alone does not update the production website. Keep legacy Make intake available until the new website deployment has been verified and old browser traffic has drained.
 - Wix sending-domain setup and Google calendar sharing remain account-side tasks. The separate dashboard is an independent sample-data foundation; live accounts and login are deferred by request.
+
+## November 7, 2026: Owner alerts move from FormSubmit to GHL
+
+FormSubmit (`formsubmit.co/dean@homegrown.marketing`) was returning 522, so Dean's direct alert emails were not reliable. The website no longer sends owner alerts through FormSubmit. Every owner-alert form now reaches GHL through our own API, and Dean's alert email comes from a GHL workflow. This replaces the "existing direct owner email" noted in the October 19 entry.
+
+| Form | Website path | What lands in GHL |
+| --- | --- | --- |
+| Services booking flow, Social Media path | `POST /api/hgv-inquiry` (unchanged) | Contact upsert + one opportunity in **Partnership & Retainer**, Lead stage. Consent marker and duplicate suppression are unchanged. |
+| Pricing section SMM form (`TransformationSection`) | `POST /api/hgv-inquiry` | Same as above. Business name is put at the top of the inquiry message. SMS consent is always `false` because this form has no consent checkbox. This component is not currently rendered on any page. |
+| Footer "Join Our Email List" | `POST /api/hgv-email-list` (new) | Contact upsert by email, then tag `website-email-list` added. Existing tags and the contact's name are left as they are. |
+
+The agency backup email (`formsubmit.co/info@softlaunch30.com`), Google Sheets copy and Make webhook copies are unchanged. On the pricing and footer forms these copies are sent once per submission before the API call, so they still capture the lead if GHL is down. A retry after an error sends only the API call again.
+
+`/api/hgv-email-list` uses the same `HGV_ORCHESTRATOR_MODE=live`, `GHL_PIT` (or `GHL_HOMEGROWN_API_TOKEN`) and `GHL_LOCATION_ID` env vars as `/api/hgv-inquiry`. The token needs the contacts write scope, which also covers adding tags. It supports `?dry_run=1` and has the same `website` honeypot as the inquiry route.
+
+### GHL workflows to create (account-side, before deploying)
+
+Build and publish both workflows **before** the website release. Until they are live, Dean gets no alert email for these forms. In GHL: **Automation → Workflows → + Create Workflow → Start from Scratch**.
+
+**1. `Website - SMM Inquiry - Dean Alert`**
+
+1. **Add New Trigger → Opportunity Created.** Add filter **In pipeline** = `Partnership & Retainer`. Optionally add **Pipeline stage** = `Lead`, which is the stage the website uses.
+2. **Wait** 1 minute, as in `Social Media Inquiry - Acknowledgment`, so the opportunity's custom fields are populated before the email is built.
+3. **Send Internal Notification** → type **Email**.
+   - Send to: **Custom Email** → `dean@homegrown.marketing`
+   - From name: `Homegrown Visuals Website`
+   - Subject: `New Social Media Marketing inquiry: {{contact.name}}`
+   - Body: name `{{contact.name}}`, email `{{contact.email}}`, phone `{{contact.phone}}`, opportunity `{{opportunity.name}}`. Add the opportunity's **Additional Info** field (the inquiry message) and **Special Requests** field (SMS consent) from the merge-field picker under Opportunity → custom fields. Add a link to the opportunity if the picker offers one.
+4. Settings: **Allow re-entry** on, so a returning contact's new inquiry alerts again. Each website inquiry creates only one opportunity because duplicate retries are suppressed server-side, so one inquiry sends one alert.
+5. Save and **Publish**.
+
+**2. `Website - Email List - Dean Alert`**
+
+1. **Add New Trigger → Contact Tag**, filter **Tag Added** = `website-email-list`.
+2. **Send Internal Notification** → type **Email**.
+   - Send to: **Custom Email** → `dean@homegrown.marketing`
+   - Subject: `New email list subscriber: {{contact.email}}`
+   - Body: email `{{contact.email}}`, name `{{contact.name}}` (often blank for footer sign-ups), date added.
+3. Settings: re-entry can stay off. A contact who already has the tag does not fire the trigger again, so repeat sign-ups don't send duplicate alerts.
+4. Save and **Publish**.
+
+### Verification
+
+1. **SMM:** in GHL, create a test contact (e.g. `hgv-alert-test+smm@…`) and manually add an opportunity in Partnership & Retainer / Lead. Confirm Dean receives the email within about 2 minutes and that it shows the Additional Info value. Delete the test opportunity and contact afterwards. The existing acknowledgment workflow sends SMS only when Special Requests is `Inquiry SMS follow-up: requested`, so leave that field empty on the test.
+2. **Email list:** add tag `website-email-list` to a test contact. Confirm Dean receives the email, then delete the test contact.
+3. After deploy: `POST /api/hgv-email-list?dry_run=1` with `{"email":"test@example.com"}` returns `{"ok":true,"dryRun":true}`. Then do one real footer sign-up with a test address and confirm the tag appears on the contact and Dean gets the alert.
+4. Check the Make scenarios and Sheet still receive the copies.
+
+### Rollback
+
+Revert the website PR. FormSubmit was already failing, so rollback does not restore Dean's alerts. The GHL workflows can stay published: they only fire on GHL records, so they do not double-alert after a revert. To pause the alerts, set either workflow to Draft.

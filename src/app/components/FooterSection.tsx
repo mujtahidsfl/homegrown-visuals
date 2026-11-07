@@ -1,7 +1,9 @@
 import { ArrowUpRight, Facebook, Instagram, Mail, MapPin, Phone } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import imgHgvLogo from "../../assets/cd8f347f8929f0c65b02f008df4e6d7431d70a30.png";
-import { DEAN_ALERT_ENDPOINT, sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
+import { sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
+import { postIntake } from "../websiteIntake";
 
 const FOOTER_EMAIL_WEBHOOK_URL = "https://hook.us2.make.com/72v3rcegdh1cxqmupxtf4vxe3ftaf7gu";
 
@@ -38,7 +40,45 @@ function sendWebhookCopy(form: HTMLFormElement, webhookUrl: string, source: stri
   });
 }
 
+const FOOTER_FORM_SOURCE = "footer_email_subscribe_form";
+
 export function FooterSection() {
+  const [subscribeStatus, setSubscribeStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const copiesSentForRef = useRef<string | null>(null);
+  const honeypotRef = useRef<HTMLInputElement>(null);
+
+  const handleSubscribe = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (subscribeStatus === "submitting") return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const email = String(formData.get("email") || "").trim();
+
+    // Backup email, Sheets and webhook copies go out once per address, before
+    // GHL, so they still capture the sign-up if our API is down.
+    if (copiesSentForRef.current !== email.toLowerCase()) {
+      copiesSentForRef.current = email.toLowerCase();
+      sendBackupEmailFromFormData(formData, {
+        source: FOOTER_FORM_SOURCE,
+        subject: "Backup Copy - Footer Email Subscriber",
+      });
+      sendGoogleSheetsFromFormData(formData, FOOTER_FORM_SOURCE);
+      sendWebhookCopy(form, FOOTER_EMAIL_WEBHOOK_URL, FOOTER_FORM_SOURCE);
+    }
+
+    setSubscribeStatus("submitting");
+    const accepted = await postIntake("/api/hgv-email-list", {
+      email,
+      website: honeypotRef.current?.value || "",
+    });
+    if (!accepted) {
+      setSubscribeStatus("error");
+      return;
+    }
+    form.reset();
+    setSubscribeStatus("success");
+  };
+
   return (
     <footer className="bg-[#000000] text-white px-4 sm:px-6 pt-14 sm:pt-16 pb-9 sm:pb-10">
       <div className="max-w-[1394px] mx-auto">
@@ -181,41 +221,39 @@ export function FooterSection() {
             Join Our Email List
           </p>
           <form
-            action={DEAN_ALERT_ENDPOINT}
-            method="POST"
-            onSubmit={(event) => {
-              sendBackupEmailFromFormData(new FormData(event.currentTarget), {
-                source: "footer_email_subscribe_form",
-                subject: "Backup Copy - Footer Email Subscriber",
-              });
-              sendGoogleSheetsFromFormData(new FormData(event.currentTarget), "footer_email_subscribe_form");
-              sendWebhookCopy(
-                event.currentTarget,
-                FOOTER_EMAIL_WEBHOOK_URL,
-                "footer_email_subscribe_form",
-              );
-            }}
+            onSubmit={handleSubscribe}
             className="mt-4 flex flex-col sm:flex-row gap-3 sm:gap-4"
           >
-            <input type="hidden" name="_subject" value="New Homegrown Visuals Footer Subscriber" />
-            <input type="hidden" name="_captcha" value="false" />
-            <input type="hidden" name="_template" value="table" />
+            <input ref={honeypotRef} tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
             <input
               type="email"
               name="email"
               required
+              maxLength={254}
+              aria-label="Email address"
               placeholder="Enter your email"
               className="h-12 sm:h-[52px] w-full sm:max-w-[440px] rounded-full bg-transparent border border-white/35 px-5 text-white placeholder:text-white/55 focus:outline-none focus:border-white/70"
               style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300 }}
             />
             <button
               type="submit"
+              disabled={subscribeStatus === "submitting"}
               className="h-12 sm:h-[52px] px-7 rounded-full bg-white text-black hover:bg-white/90 transition-colors"
               style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 400 }}
             >
-              Subscribe
+              {subscribeStatus === "submitting" ? "Subscribing…" : "Subscribe"}
             </button>
           </form>
+          {subscribeStatus === "success" && (
+            <p role="status" className="mt-3 text-[14px] text-white/80" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300 }}>
+              You're on the list. Thanks for subscribing!
+            </p>
+          )}
+          {subscribeStatus === "error" && (
+            <p role="alert" className="mt-3 text-[14px] text-red-300" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300 }}>
+              We couldn't add you to the list. Please try again.
+            </p>
+          )}
         </div>
 
         <div
