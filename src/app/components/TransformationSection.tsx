@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Check } from "lucide-react";
 import { PACKAGE_DISPLAY, type PackageKey } from "../booking/config";
-import { DEAN_ALERT_ENDPOINT, sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
+import { sendBackupEmailFromFormData, sendGoogleSheetsFromFormData } from "../backupEmail";
+import { createIntakeId, postIntake } from "../websiteIntake";
 import { BookingIntentModal } from "./booking/BookingIntentModal";
 
 const SOCIAL_MEDIA_WEBHOOK_URL = "https://hook.us2.make.com/im0m5469kvkslku9bfqqudvymgs1nq6x";
@@ -45,8 +46,53 @@ function sendWebhookCopy(form: HTMLFormElement, webhookUrl: string, source: stri
   });
 }
 
+const SOCIAL_FORM_SOURCE = "services_social_media_marketing_form";
+
 export function TransformationSection() {
   const [activePackage, setActivePackage] = useState<PackageKey | null>(null);
+  const [socialStatus, setSocialStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  // One id per inquiry so a retry after a network error hits GHL's duplicate
+  // suppression instead of creating a second opportunity.
+  const inquiryIdRef = useRef(createIntakeId());
+  const copiesSentForRef = useRef<string | null>(null);
+  const honeypotRef = useRef<HTMLInputElement>(null);
+
+  const handleSocialSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (socialStatus === "submitting") return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const inquiryId = inquiryIdRef.current;
+
+    // Backup email, Sheets and webhook copies go out once per inquiry, before
+    // GHL, so they still capture the lead if our API is down.
+    if (copiesSentForRef.current !== inquiryId) {
+      copiesSentForRef.current = inquiryId;
+      sendBackupEmailFromFormData(formData, {
+        source: SOCIAL_FORM_SOURCE,
+        subject: "Backup Copy - Social Media Marketing Services Inquiry",
+      });
+      sendGoogleSheetsFromFormData(formData, SOCIAL_FORM_SOURCE);
+      sendWebhookCopy(form, SOCIAL_MEDIA_WEBHOOK_URL, SOCIAL_FORM_SOURCE);
+    }
+
+    setSocialStatus("submitting");
+    const field = (name: string) => String(formData.get(name) || "").trim();
+    const accepted = await postIntake("/api/hgv-inquiry", {
+      inquiry_id: inquiryId,
+      contact: { fullName: field("name"), email: field("email"), phone: field("phone_number") },
+      message: `Business: ${field("business_name")}\n\n${field("reason_for_submitting")}`,
+      sms_consent: false,
+      website: honeypotRef.current?.value || "",
+    });
+    if (!accepted) {
+      setSocialStatus("error");
+      return;
+    }
+    form.reset();
+    inquiryIdRef.current = createIntakeId();
+    setSocialStatus("success");
+  };
 
   return (
     <section
@@ -272,27 +318,13 @@ export function TransformationSection() {
             </p>
 
             <form
-              action={DEAN_ALERT_ENDPOINT}
-              method="POST"
-              onSubmit={(event) => {
-                sendBackupEmailFromFormData(new FormData(event.currentTarget), {
-                  source: "services_social_media_marketing_form",
-                  subject: "Backup Copy - Social Media Marketing Services Inquiry",
-                });
-                sendGoogleSheetsFromFormData(new FormData(event.currentTarget), "services_social_media_marketing_form");
-                sendWebhookCopy(
-                  event.currentTarget,
-                  SOCIAL_MEDIA_WEBHOOK_URL,
-                  "services_social_media_marketing_form",
-                );
-              }}
+              onSubmit={handleSocialSubmit}
               className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5"
             >
-              <input type="hidden" name="_subject" value="New Social Media Marketing Services Inquiry" />
-              <input type="hidden" name="_captcha" value="false" />
-              <input type="hidden" name="_template" value="table" />
+              <input ref={honeypotRef} tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
               <input
                 name="name"
+                maxLength={150}
                 required
                 placeholder="Name"
                 className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
@@ -300,6 +332,7 @@ export function TransformationSection() {
               />
               <input
                 name="business_name"
+                maxLength={150}
                 required
                 placeholder="Business Name"
                 className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
@@ -308,6 +341,7 @@ export function TransformationSection() {
               <input
                 type="email"
                 name="email"
+                maxLength={254}
                 required
                 placeholder="Email"
                 className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
@@ -316,6 +350,7 @@ export function TransformationSection() {
               <input
                 type="tel"
                 name="phone_number"
+                maxLength={40}
                 required
                 placeholder="Phone Number"
                 className="h-11 px-4 rounded-[12px] border border-[#d7e0eb] outline-none focus:border-[#2FA4A9] text-[#1F2D5A]"
@@ -323,6 +358,7 @@ export function TransformationSection() {
               />
               <textarea
                 name="reason_for_submitting"
+                maxLength={2800}
                 required
                 placeholder="Reason for submitting"
                 rows={4}
@@ -332,11 +368,22 @@ export function TransformationSection() {
               <div className="sm:col-span-2 mt-1">
                 <button
                   type="submit"
+                  disabled={socialStatus === "submitting"}
                   className="h-11 px-8 rounded-full border border-[#1F2D5A] bg-[#1F2D5A] text-white text-[14px] hover:bg-[#17254d] transition-colors"
                   style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700 }}
                 >
-                  Contact us
+                  {socialStatus === "submitting" ? "Sending…" : "Contact us"}
                 </button>
+                {socialStatus === "success" && (
+                  <p role="status" className="mt-3 text-[14px] text-[#1F2D5A]" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+                    Thanks! Your inquiry is in. Dean will reach out shortly.
+                  </p>
+                )}
+                {socialStatus === "error" && (
+                  <p role="alert" className="mt-3 text-[14px] text-red-700" style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 500 }}>
+                    We couldn't submit your inquiry. Your details are still here. Please try again.
+                  </p>
+                )}
               </div>
             </form>
           </article>

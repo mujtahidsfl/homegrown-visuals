@@ -38,7 +38,6 @@ import {
 } from "../booking/discounts";
 import {
   sendBackupEmailFromFormData,
-  DEAN_ALERT_ENDPOINT,
   sendBackupEmailFromPayload,
   sendBackupEmailFromPayloadKeepalive,
   sendGoogleSheetsFromFormData,
@@ -2271,17 +2270,8 @@ export function ServicesBookingFlow() {
                   subject: "Backup Copy - Social Media Marketing Inquiry",
                 });
                 sendGoogleSheetsFromFormData(formData, "services_social_media_marketing_flow");
-                // Preserve Dean's existing direct inquiry notification while
-                // the durable GHL record becomes the primary intake path.
-                const ownerNotice = new URLSearchParams();
-                formData.forEach((value, key) => { if (typeof value === "string") ownerNotice.append(key, value); });
-                ownerNotice.append("source", "services_social_media_marketing_flow");
-                ownerNotice.append("submitted_at", new Date().toISOString());
-                void fetch(DEAN_ALERT_ENDPOINT, {
-                  method: "POST", mode: "no-cors", keepalive: true,
-                  headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-                  body: ownerNotice.toString(),
-                }).catch(() => undefined);
+                // Dean's alert comes from the GHL workflow on the new
+                // Partnership & Retainer opportunity (docs/HOMEGROWN_CUTOVER.md).
 
                 servicesSubmissionFinalizedRef.current = true;
                 clearServicesDraft();
@@ -2296,9 +2286,6 @@ export function ServicesBookingFlow() {
               }}
               className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
-              <input type="hidden" name="_subject" value="New Social Media Marketing Inquiry" />
-              <input type="hidden" name="_captcha" value="false" />
-              <input type="hidden" name="_template" value="table" />
               <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
               <input
                 name="full_name"

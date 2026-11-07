@@ -1,6 +1,5 @@
-// Dean's direct inquiry alerts (HGV 02). FormSubmit holds submissions to a new
-// address until that inbox clicks the one-time activation email.
-export const DEAN_ALERT_ENDPOINT = "https://formsubmit.co/dean@homegrown.marketing";
+// Dean's owner alerts come from GHL workflows, not FormSubmit
+// (docs/HOMEGROWN_CUTOVER.md). This endpoint is only the agency backup copy.
 const BACKUP_EMAIL_ENDPOINT = "https://formsubmit.co/info@softlaunch30.com";
 const BACKUP_IFRAME_NAME = "hgv-backup-email-target";
 const GOOGLE_SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbzsAWV4PxMdpvJCd_VJ9HFhQ0E7MUCBzzu1vy-jScN2MCb0z7L1mPSgHP2-5CJE9yc/exec";
